@@ -2,6 +2,7 @@ module Main exposing (..)
 
 import Browser exposing (Document)
 import Html exposing (Html)
+import Html.Attributes as Attr
 
 
 type Model
@@ -26,15 +27,25 @@ main =
         }
 
 
+viewChar : Char -> Html Msg
+viewChar c =
+    Html.span [] [Html.text (String.fromChar c)]
+
+
+showText : String -> Html Msg
+showText str =
+    let
+        chars =
+            String.toList str
+    in
+    Html.p [ Attr.style "font-family" "monospace" ] <| (List.map viewChar chars)
+
+
 view : Model -> Document Msg
 view (Model str) =
-    let
-        body =
-            Html.text str
-    in
-        { title = "cisp-lab"
-        , body = [body]
-        }
+    { title = "cisp-lab"
+    , body = [ showText str ]
+    }
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
