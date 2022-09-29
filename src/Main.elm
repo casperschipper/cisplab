@@ -3,6 +3,7 @@ module Main exposing (..)
 import Browser exposing (Document)
 import Html exposing (Html)
 import Html.Attributes as Attr
+import Html.Events
 import Parser exposing ((|.), (|=), Parser, number)
 
 
@@ -11,7 +12,7 @@ type Model
 
 
 type Msg
-    = NoOp
+    = CispString String
 
 
 type Sexpr
@@ -22,6 +23,21 @@ type Sexpr
 type CValue
     = CNumber Float
     | CString String
+
+
+toString : Sexpr -> String
+toString sexp =
+    case sexp of
+        Slist lst ->
+            "(" ++ String.join " " (List.map toString lst) ++ ")"
+
+        Value v ->
+            case v of
+                CNumber flt ->
+                    String.fromFloat flt
+
+                CString str ->
+                    str
 
 
 type CispWord
@@ -78,10 +94,6 @@ input =
 
 
 init _ =
-    let
-        _ =
-            Debug.log input (Parser.run sexpr input)
-    in
     ( Model input, Cmd.none )
 
 
@@ -109,18 +121,35 @@ showText str =
     Html.p [ Attr.style "font-family" "monospace" ] <| List.map viewChar chars
 
 
+textInput : Html Msg
+textInput =
+    Html.input [ Html.Events.onInput CispString ] []
+
+
 view : Model -> Document Msg
 view (Model str) =
     { title = "cisp-lab"
-    , body = [ showText str ]
+    , body = [ textInput, showText str ]
     }
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        NoOp ->
-            ( model, Cmd.none )
+        CispString str ->
+            let
+                result =
+                    Parser.run sexpr str
+
+                result_str =
+                    case result of
+                        Ok res ->
+                            res |> toString
+
+                        Err _ ->
+                            "Sorry it ididn't work out"
+            in
+            ( Model result_str, Cmd.none )
 
 
 subscriptions : Model -> Sub Msg
