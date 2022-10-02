@@ -1,10 +1,14 @@
 module Main exposing (..)
 
 import Browser exposing (Document)
+import Element exposing (Element)
+import Element.Background
+import Element.Font
+import Element.Input
 import Html exposing (Html)
 import Html.Attributes as Attr
 import Html.Events
-import Parser exposing ((|.), (|=), Parser, number)
+import Parser exposing ((|.), (|=), Parser)
 
 
 type Model
@@ -23,6 +27,32 @@ type Sexpr
 type CValue
     = CNumber Float
     | CString String
+    | CispWord String
+
+
+cvalueToString v =
+    case v of
+        CNumber flt ->
+            String.fromFloat flt
+
+        CString str ->
+            str
+
+        CispWord str ->
+            str
+
+
+cispwords =
+    [ "seq"
+    , "line"
+    , "ch"
+    , "rv"
+    , "walk"
+    , "transcat"
+    , "cycle"
+    , "st"
+    , "index"
+    ]
 
 
 toString : Sexpr -> String
@@ -32,12 +62,16 @@ toString sexp =
             "(" ++ String.join " " (List.map toString lst) ++ ")"
 
         Value v ->
-            case v of
-                CNumber flt ->
-                    String.fromFloat flt
+            cvalueToString v
 
-                CString str ->
-                    str
+
+type alias Depth =
+    Int
+
+
+type Tree a
+    = Node a
+    | Tree Depth (List (Tree a))
 
 
 type CispWord
@@ -55,11 +89,19 @@ cispNumber =
         }
 
 
+parseString : String -> CValue
+parseString str =
+    if List.member str cispwords then
+        CispWord str
+
+    else 
+        CString str
+
 value : Parser CValue
 value =
     Parser.oneOf
         [ cispNumber
-        , Parser.chompWhile Char.isAlpha |> Parser.getChompedString |> Parser.map CString
+        , Parser.chompWhile Char.isAlpha |> Parser.getChompedString |> Parser.map parseString
         ]
 
 
@@ -127,31 +169,143 @@ textInput =
 
 
 view : Model -> Document Msg
-view (Model str) =
+view model =
     { title = "cisp-lab"
-    , body = [ textInput, showText str ]
+    , body = [ display model ]
     }
+
+
+colorize cispString =
+    let
+        result =
+            Parser.run sexpr cispString
+
+
+        _ = Debug.log "result:\n" result
+    in
+    case result of
+        Ok res ->
+            res |> makeTree |> renderTree
+
+        Err _ ->
+            Element.text "oh no!"
+
+
+black =
+    Element.rgb 0.4 0.1 0.1
+
+
+white =
+    Element.rgb 1 1 1
+
+
+display (Model current) =
+    Element.layout
+        [ Element.width Element.fill, Element.Background.color black ]
+        (Element.column [ Element.centerX, Element.spacing 25 ]
+            [ Element.Input.text []
+                { onChange = CispString
+                , text = current
+                , placeholder = Nothing
+                , label = Element.Input.labelAbove [ Element.Font.color white ] <| Element.text "CISP:"
+                }
+            , colorize current
+            ]
+        )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         CispString str ->
-            let
-                result =
-                    Parser.run sexpr str
-
-                result_str =
-                    case result of
-                        Ok res ->
-                            res |> toString
-
-                        Err _ ->
-                            "Sorry it ididn't work out"
-            in
-            ( Model result_str, Cmd.none )
+            ( Model str, Cmd.none )
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.none
+
+
+makeTree : Sexpr -> Tree CValue
+makeTree expr =
+    let
+        aux d e =
+            case e of
+                Slist lst ->
+                    Tree d (lst |> List.map (aux (d + 1)))
+
+                Value v ->
+                    Node v
+    in
+    aux 0 expr
+
+
+color : Int -> Element.Color
+color c =
+    let
+        rgb =
+            Element.rgb255
+    in
+    case modBy 6 c of
+        0 ->
+            rgb 200 30 30
+
+        1 ->
+            rgb 30 200 30
+
+        2 ->
+            rgb 30 30 200
+
+        3 ->
+            rgb 50 50 100
+
+        4 ->
+            rgb 100 50 50
+
+        5 ->
+            rgb 100 100 100
+
+        _ ->
+            rgb 200 100 200
+
+
+leftColon cattr =
+    Element.el [ Element.Font.color cattr ] <| Element.text "("
+
+
+rightColon cattr =
+    Element.el [ Element.Font.color cattr ] <| Element.text ")"
+
+
+space =
+    Element.el [] (Element.text " ")
+
+cvalueToElement : CValue -> Element Msg
+cvalueToElement cvalue =
+    case cvalue of
+        CNumber flt ->
+            Element.text (String.fromFloat flt) |> Element.el [Element.Font.color (Element.rgb 0.8 0.8 1.0)] 
+
+        CString str ->
+            Element.text str |> Element.el [Element.Font.color (Element.rgb 0.0 1.0 1.0)] 
+
+
+        CispWord str ->
+            Element.text str |> Element.el [Element.Font.color (Element.rgb 1.0 1.0 0.0)] 
+
+renderTree tree =
+    case tree of
+        Tree n lst ->
+            let
+                clr =
+                    color n
+
+                chars =
+                    List.map renderTree lst 
+                    |> List.intersperse space
+                    |> \xs -> [leftColon clr] ++ xs  ++[ rightColon clr ]
+            in
+            Element.paragraph [] chars
+
+        Node v ->
+            cvalueToElement v
