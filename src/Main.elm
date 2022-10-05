@@ -1,4 +1,4 @@
-port module Main exposing (..)
+port module Main exposing (CValue(..), CispWord(..), Depth, Model(..), Msg(..), Sexpr(..), Tree(..), main)
 
 import Browser exposing (Document)
 import Element exposing (Element)
@@ -6,11 +6,9 @@ import Element.Background
 import Element.Font
 import Element.Input
 import Html exposing (Html)
-import Html.Attributes as Attr
-import Html.Events
 import Json.Decode as JD
 import Json.Encode as JE
-import Parser exposing ((|.), (|=), Parser)
+import Parser exposing (Parser)
 import WebSocket exposing (WebSocketCmd)
 
 
@@ -41,18 +39,7 @@ type CValue
     | CispWord String
 
 
-cvalueToString v =
-    case v of
-        CNumber flt ->
-            String.fromFloat flt
-
-        CString str ->
-            str
-
-        CispWord str ->
-            str
-
-
+cispwords : List String
 cispwords =
     [ "seq"
     , "line"
@@ -64,16 +51,6 @@ cispwords =
     , "st"
     , "index"
     ]
-
-
-toString : Sexpr -> String
-toString sexp =
-    case sexp of
-        Slist lst ->
-            "(" ++ String.join " " (List.map toString lst) ++ ")"
-
-        Value v ->
-            cvalueToString v
 
 
 type alias Depth =
@@ -139,14 +116,12 @@ sexpr =
     clist
 
 
-parse str =
-    Parser.run sexpr str
-
-
+input : String
 input =
     "(seq 1 (seq 4 5) 3)"
 
 
+init : a -> ( Model, Cmd msg )
 init _ =
     let
         websocketCmd =
@@ -158,7 +133,7 @@ init _ =
                 |> wssend
 
         batch =
-            Cmd.batch [ websocketCmd ]
+            websocketCmd
     in
     ( Model input, batch )
 
@@ -178,20 +153,6 @@ viewChar c =
     Html.span [] [ Html.text (String.fromChar c) ]
 
 
-showText : String -> Html Msg
-showText str =
-    let
-        chars =
-            String.toList str
-    in
-    Html.p [ Attr.style "font-family" "monospace" ] <| List.map viewChar chars
-
-
-textInput : Html Msg
-textInput =
-    Html.input [ Html.Events.onInput CispString ] []
-
-
 view : Model -> Document Msg
 view model =
     { title = "cisp-lab"
@@ -199,6 +160,7 @@ view model =
     }
 
 
+colorize : String -> Element Msg
 colorize cispString =
     let
         result =
@@ -215,14 +177,17 @@ colorize cispString =
             Element.text "oh no!"
 
 
+black : Element.Color
 black =
     Element.rgb 1.0 1.0 1.0
 
 
+white : Element.Color
 white =
     Element.rgb 1 1 1
 
 
+display : Model -> Html Msg
 display (Model current) =
     Element.layout
         [ Element.width Element.fill, Element.Background.color black ]
@@ -242,7 +207,6 @@ display (Model current) =
         )
 
 
-
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
@@ -250,24 +214,33 @@ update msg model =
             ( Model str, Cmd.none )
 
         ReceivedFrame result ->
-            let 
-                _ = 
-                    case result of 
-                        Err err -> (JD.errorToString err) |> Debug.log "err"
+            let
+                _ =
+                    case result of
+                        Err err ->
+                            JD.errorToString err |> Debug.log "err"
 
-                        Ok websockMsg -> 
+                        Ok websockMsg ->
                             case websockMsg of
-                                WebSocket.Error err -> let _ = Debug.log "error,string" err in ""
+                                WebSocket.Error err ->
+                                    let
+                                        _ =
+                                            Debug.log "error,string" err
+                                    in
+                                    ""
 
-                                WebSocket.Data de -> 
-                                    let _ = Debug.log "success!" de in ""
-
+                                WebSocket.Data de ->
+                                    let
+                                        _ =
+                                            Debug.log "success!" de
+                                    in
+                                    ""
             in
             case model of
                 Model str ->
                     ( Model str, Cmd.none )
 
-        SendMessage message ->
+        SendMessage _ ->
             ( model, WebSocket.Send { name = "foo", content = "/list" } |> wssend )
 
 
@@ -276,6 +249,7 @@ subscriptions _ =
     receiveSocketMsg <| WebSocket.receive ReceivedFrame
 
 
+wssend : WebSocketCmd -> Cmd msg
 wssend =
     WebSocket.send sendSocketCommand
 
@@ -323,14 +297,17 @@ color c =
             rgb 200 100 200
 
 
+leftColon : Element.Color -> Element msg
 leftColon cattr =
     Element.el [ Element.Font.color cattr ] <| Element.text "("
 
 
+rightColon : Element.Color -> Element msg
 rightColon cattr =
     Element.el [ Element.Font.color cattr ] <| Element.text ")"
 
 
+space : Element msg
 space =
     Element.el [] (Element.text " ")
 
@@ -348,6 +325,7 @@ cvalueToElement cvalue =
             Element.text str |> Element.el [ Element.Font.color (Element.rgb 0.4 0.5 0.0) ]
 
 
+renderTree : Tree CValue -> Element Msg
 renderTree tree =
     case tree of
         Tree n lst ->
@@ -358,7 +336,7 @@ renderTree tree =
                 chars =
                     List.map renderTree lst
                         |> List.intersperse space
-                        |> (\xs -> [ leftColon clr ] ++ xs ++ [ rightColon clr ])
+                        |> (\xs -> leftColon clr :: xs ++ [ rightColon clr ])
             in
             Element.paragraph [] chars
 
