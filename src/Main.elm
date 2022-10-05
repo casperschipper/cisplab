@@ -1,4 +1,4 @@
-module Main exposing (..)
+port module Main exposing (..)
 
 import Browser exposing (Document)
 import Element exposing (Element)
@@ -8,7 +8,16 @@ import Element.Input
 import Html exposing (Html)
 import Html.Attributes as Attr
 import Html.Events
+import Json.Decode as JD
+import Json.Encode as JE
 import Parser exposing ((|.), (|=), Parser)
+import WebSocket exposing (WebSocketCmd)
+
+
+port receiveSocketMsg : (JD.Value -> msg) -> Sub msg
+
+
+port sendSocketCommand : JE.Value -> Cmd msg
 
 
 type Model
@@ -17,6 +26,8 @@ type Model
 
 type Msg
     = CispString String
+    | ReceivedFrame (Result JD.Error WebSocket.WebSocketMsg)
+    | SendMessage String
 
 
 type Sexpr
@@ -94,8 +105,9 @@ parseString str =
     if List.member str cispwords then
         CispWord str
 
-    else 
+    else
         CString str
+
 
 value : Parser CValue
 value =
@@ -136,7 +148,19 @@ input =
 
 
 init _ =
-    ( Model input, Cmd.none )
+    let
+        websocketCmd =
+            WebSocket.Connect
+                { name = "foo"
+                , address = "ws://127.0.0.1:3000"
+                , protocol = "json"
+                }
+                |> wssend
+
+        batch =
+            Cmd.batch [ websocketCmd ]
+    in
+    ( Model input, batch )
 
 
 main : Platform.Program () Model Msg
@@ -180,8 +204,8 @@ colorize cispString =
         result =
             Parser.run sexpr cispString
 
-
-        _ = Debug.log "result:\n" result
+        _ =
+            Debug.log "result:\n" result
     in
     case result of
         Ok res ->
@@ -203,7 +227,11 @@ display (Model current) =
     Element.layout
         [ Element.width Element.fill, Element.Background.color black ]
         (Element.column [ Element.centerX, Element.spacing 25 ]
-            [ Element.Input.text []
+            [ Element.Input.button []
+                { onPress = Just (SendMessage "/list")
+                , label = Element.text "push me!!!"
+                }
+            , Element.Input.text []
                 { onChange = CispString
                 , text = current
                 , placeholder = Nothing
@@ -214,16 +242,42 @@ display (Model current) =
         )
 
 
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         CispString str ->
             ( Model str, Cmd.none )
 
+        ReceivedFrame result ->
+            let 
+                _ = 
+                    case result of 
+                        Err err -> (JD.errorToString err) |> Debug.log "err"
+
+                        Ok websockMsg -> 
+                            case websockMsg of
+                                WebSocket.Error err -> let _ = Debug.log "error,string" err in ""
+
+                                WebSocket.Data de -> 
+                                    let _ = Debug.log "success!" de in ""
+
+            in
+            case model of
+                Model str ->
+                    ( Model str, Cmd.none )
+
+        SendMessage message ->
+            ( model, WebSocket.Send { name = "foo", content = "/list" } |> wssend )
+
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
-    Sub.none
+subscriptions _ =
+    receiveSocketMsg <| WebSocket.receive ReceivedFrame
+
+
+wssend =
+    WebSocket.send sendSocketCommand
 
 
 makeTree : Sexpr -> Tree CValue
@@ -280,18 +334,19 @@ rightColon cattr =
 space =
     Element.el [] (Element.text " ")
 
+
 cvalueToElement : CValue -> Element Msg
 cvalueToElement cvalue =
     case cvalue of
         CNumber flt ->
-            Element.text (String.fromFloat flt) |> Element.el [Element.Font.color (Element.rgb 0.8 0.8 1.0)] 
+            Element.text (String.fromFloat flt) |> Element.el [ Element.Font.color (Element.rgb 0.8 0.8 1.0) ]
 
         CString str ->
-            Element.text str |> Element.el [Element.Font.color (Element.rgb 0.0 1.0 1.0)] 
-
+            Element.text str |> Element.el [ Element.Font.color (Element.rgb 0.0 1.0 1.0) ]
 
         CispWord str ->
-            Element.text str |> Element.el [Element.Font.color (Element.rgb 1.0 1.0 0.0)] 
+            Element.text str |> Element.el [ Element.Font.color (Element.rgb 1.0 1.0 0.0) ]
+
 
 renderTree tree =
     case tree of
@@ -301,9 +356,9 @@ renderTree tree =
                     color n
 
                 chars =
-                    List.map renderTree lst 
-                    |> List.intersperse space
-                    |> \xs -> [leftColon clr] ++ xs  ++[ rightColon clr ]
+                    List.map renderTree lst
+                        |> List.intersperse space
+                        |> (\xs -> [ leftColon clr ] ++ xs ++ [ rightColon clr ])
             in
             Element.paragraph [] chars
 

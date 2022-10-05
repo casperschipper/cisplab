@@ -4,4 +4,6 @@ an interface for cisp in Elm.
 
 # Todo
 
-* Linking up with Web Socket.
+* Linking up with Web Socket. 
+
+
