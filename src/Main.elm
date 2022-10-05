@@ -216,7 +216,7 @@ colorize cispString =
 
 
 black =
-    Element.rgb 0.4 0.1 0.1
+    Element.rgb 1.0 1.0 1.0
 
 
 white =
@@ -339,13 +339,13 @@ cvalueToElement : CValue -> Element Msg
 cvalueToElement cvalue =
     case cvalue of
         CNumber flt ->
-            Element.text (String.fromFloat flt) |> Element.el [ Element.Font.color (Element.rgb 0.8 0.8 1.0) ]
+            Element.text (String.fromFloat flt) |> Element.el [ Element.Font.color (Element.rgb 0.0 0.4 0.0) ]
 
         CString str ->
             Element.text str |> Element.el [ Element.Font.color (Element.rgb 0.0 1.0 1.0) ]
 
         CispWord str ->
-            Element.text str |> Element.el [ Element.Font.color (Element.rgb 1.0 1.0 0.0) ]
+            Element.text str |> Element.el [ Element.Font.color (Element.rgb 0.4 0.5 0.0) ]
 
 
 renderTree tree =
