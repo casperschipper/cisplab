@@ -7,15 +7,11 @@ import Element.Border
 import Element.Font
 import Element.Input
 import Html exposing (Html)
+import Html.Events exposing (custom)
 import Json.Decode as JD
 import Json.Encode as JE
 import Parser exposing (Parser)
-import WebSocket exposing (WebSocketCmd)
 import WebSocket exposing (WebSocketCmd(..))
-
-
-
--- TODO: introduce simple text field to issue hand written commands
 
 
 port receiveSocketMsg : (JD.Value -> msg) -> Sub msg
@@ -45,21 +41,23 @@ type Model
         , custom : String
         }
 
+
 getCustom : Model -> String
-getCustom (Model model) = 
+getCustom (Model model) =
     model.custom
+
 
 getCisp : Model -> CispProgram
 getCisp (Model model) =
     model.cisp
 
 
-
 type Msg
     = CispString String
     | ReceivedFrame (Result JD.Error WebSocket.WebSocketMsg)
     | SendMessage String
-    | SendCustomString String
+    | SetCustom String
+    | SendCustom
 
 
 type Sexpr
@@ -217,13 +215,25 @@ white : Element.Color
 white =
     Element.rgb 1 1 1
 
+buttonStyle = 
+    [ Element.centerX
+                            , Element.Border.solid
+                            , Element.Border.width 1
+                            , Element.Border.rounded 5
+                            , Element.padding 10
+                            ]
+
 
 display : Model -> Html Msg
 display (Model { cisp, custom }) =
+    let 
+        textInputStyle = 
+            [Element.centerX, Element.width (Element.px 1000)]
+    in
     Element.layout
         [ Element.width Element.fill, Element.Background.color black ]
         (Element.column [ Element.centerX, Element.spacing 25 ]
-            [ Element.Input.text [ Element.centerX ]
+            [ Element.Input.text textInputStyle
                 { onChange = CispString
                 , text = cispAsString cisp
                 , placeholder = Nothing
@@ -232,19 +242,20 @@ display (Model { cisp, custom }) =
             , colorize (cispAsString cisp)
             , case cisp of
                 Valid csp ->
-                    Element.Input.button
-                        [ Element.centerX
-                        , Element.Border.solid
-                        , Element.Border.width 1
-                        , Element.Border.rounded 5
-                        , Element.padding 10
-                        ]
+                    Element.Input.button buttonStyle
                         { onPress = Just (SendMessage csp)
                         , label = Element.text "Send to CISP"
                         }
 
                 Invalid _ ->
                     Element.text "not valid"
+            , Element.Input.text textInputStyle
+                { onChange = SetCustom
+                , text = custom
+                , placeholder = Nothing
+                , label = Element.Input.labelAbove [] <| Element.text "custom ws mesage"
+                }
+            , Element.Input.button buttonStyle {onPress = Just SendCustom, label = Element.text "send custom"}
             ]
         )
 
@@ -259,10 +270,10 @@ update msg model =
             in
             case result of
                 Ok _ ->
-                    ( Model { cisp = (Valid str), custom = getCustom model }, Cmd.none )
+                    ( Model { cisp = Valid str, custom = getCustom model }, Cmd.none )
 
                 Err _ ->
-                    ( Model { cisp = (Invalid str), custom = getCustom model }, Cmd.none )
+                    ( Model { cisp = Invalid str, custom = getCustom model }, Cmd.none )
 
         ReceivedFrame result ->
             let
@@ -291,14 +302,19 @@ update msg model =
 
         SendMessage _ ->
             case getCisp model of
-                (Valid str) ->
-                    ( model, WebSocket.Send { name = "foo", content = "/1/pitch/ " ++ str } |> wssend )
+                Valid str ->
+                    ( model, WebSocket.Send { name = "cisp", content = "/1/pitch/ " ++ str } |> wssend )
 
-                (Invalid _) ->
+                Invalid _ ->
                     ( model, Cmd.none )
 
-        SendCustomString str ->
-            (model, Cmd.none)
+        SetCustom str ->
+            case model of
+                Model m ->
+                    ( Model { m | custom = str }, Cmd.none )
+
+        SendCustom ->
+            ( model, WebSocket.Send { name = "cisp", content = getCustom model } |> wssend )
 
 
 subscriptions : Model -> Sub Msg
