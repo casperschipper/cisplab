@@ -1,6 +1,7 @@
-port module Main exposing (CValue(..), CispWord(..), Depth, Model(..), Msg(..), Sexpr(..), Tree(..), main)
+port module Main exposing (Model(..), Msg(..), black, buttonStyle, color, colorize, cvalueToElement, display, getCisp, getCustom, init, input, leftColon, main, makeTree, receiveSocketMsg, renderTree, rightColon, sendSocketCommand, space, subscriptions, update, view, viewChar, white, wssend)
 
 import Browser exposing (Document)
+import Cisp exposing (..)
 import Element exposing (Element)
 import Element.Background
 import Element.Border
@@ -18,21 +19,6 @@ port receiveSocketMsg : (JD.Value -> msg) -> Sub msg
 
 
 port sendSocketCommand : JE.Value -> Cmd msg
-
-
-type CispProgram
-    = Invalid String
-    | Valid String
-
-
-cispAsString : CispProgram -> String
-cispAsString cp =
-    case cp of
-        Invalid s ->
-            s
-
-        Valid s ->
-            s
 
 
 type Model
@@ -58,94 +44,6 @@ type Msg
     | SendMessage String
     | SetCustom String
     | SendCustom
-
-
-type Sexpr
-    = Slist (List Sexpr)
-    | Value CValue
-
-
-type CValue
-    = CNumber Float
-    | CString String
-    | CispWord String
-
-
-cispwords : List String
-cispwords =
-    [ "seq"
-    , "line"
-    , "ch"
-    , "rv"
-    , "walk"
-    , "transcat"
-    , "cycle"
-    , "st"
-    , "index"
-    ]
-
-
-type alias Depth =
-    Int
-
-
-type Tree a
-    = Node a
-    | Tree Depth (List (Tree a))
-
-
-type CispWord
-    = Seq
-
-
-cispNumber : Parser CValue
-cispNumber =
-    Parser.number
-        { int = Just (\i -> i |> toFloat |> CNumber)
-        , hex = Nothing -- 0x001A is allowed
-        , octal = Nothing -- 0o0731 is not
-        , binary = Nothing -- 0b1101 is not
-        , float = Just CNumber
-        }
-
-
-parseString : String -> CValue
-parseString str =
-    if List.member str cispwords then
-        CispWord str
-
-    else
-        CString str
-
-
-value : Parser CValue
-value =
-    Parser.oneOf
-        [ cispNumber
-        , Parser.chompWhile Char.isAlpha |> Parser.getChompedString |> Parser.map parseString
-        ]
-
-
-clist : Parser Sexpr
-clist =
-    Parser.sequence
-        { start = "("
-        , separator = " "
-        , end = ")"
-        , spaces = Parser.succeed ()
-        , item =
-            Parser.oneOf
-                [ Parser.lazy (\_ -> sexpr) -- hmm why does this one have to come first ?
-                , value |> Parser.map Value
-                ]
-        , trailing = Parser.Forbidden
-        }
-        |> Parser.map Slist
-
-
-sexpr : Parser Sexpr
-sexpr =
-    clist
 
 
 input : String
@@ -215,20 +113,21 @@ white : Element.Color
 white =
     Element.rgb 1 1 1
 
-buttonStyle = 
+
+buttonStyle =
     [ Element.centerX
-                            , Element.Border.solid
-                            , Element.Border.width 1
-                            , Element.Border.rounded 5
-                            , Element.padding 10
-                            ]
+    , Element.Border.solid
+    , Element.Border.width 1
+    , Element.Border.rounded 5
+    , Element.padding 10
+    ]
 
 
 display : Model -> Html Msg
 display (Model { cisp, custom }) =
-    let 
-        textInputStyle = 
-            [Element.centerX, Element.width (Element.px 1000)]
+    let
+        textInputStyle =
+            [ Element.centerX, Element.width (Element.px 1000) ]
     in
     Element.layout
         [ Element.width Element.fill, Element.Background.color black ]
@@ -255,7 +154,7 @@ display (Model { cisp, custom }) =
                 , placeholder = Nothing
                 , label = Element.Input.labelAbove [] <| Element.text "custom ws mesage"
                 }
-            , Element.Input.button buttonStyle {onPress = Just SendCustom, label = Element.text "send custom"}
+            , Element.Input.button buttonStyle { onPress = Just SendCustom, label = Element.text "send custom" }
             ]
         )
 
