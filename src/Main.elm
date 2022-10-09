@@ -137,7 +137,7 @@ display (Model { cisp, custom }) =
                 , text = cispAsString cisp
                 , placeholder = Nothing
                 , label = Element.Input.labelAbove [ Element.Font.color white ] <| Element.text "CISP:"
-                }
+                } 
             , colorize (cispAsString cisp)
             , case cisp of
                 Valid csp ->

@@ -17,6 +17,15 @@ type CispProgram
     = Invalid String
     | Valid String
 
+ofString : String -> CispProgram
+ofString s =
+    case Parser.run clist s of
+        Ok _ ->
+            Valid s
+        
+        Err _ ->
+            Invalid s
+
 
 cispAsString : CispProgram -> String
 cispAsString cp =
