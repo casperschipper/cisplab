@@ -12,6 +12,12 @@ type alias OneVoice =
     , duration : CispProgram
     }
 
+init : OneVoice 
+init =
+    { pitch = Cisp.ofString "(st 60)" 
+    , velo = Cisp.ofString "(st 100)"
+    , channel = Cisp.ofString "(st 1)"
+    , duration = Cisp.ofString "(st 0.1)" }
 
 type Parameter
     = Pitch
@@ -30,35 +36,36 @@ type Action
 
 
 setParameter p m =
-    let str =
-        m.pitch |> cispAsString 
+    let
+        str =
+            m.pitch |> cispAsString
     in
     Update Pitch str
 
+
 changeParameter p s m =
     case p of
-        Pitch -> { m | pitch = Cisp.ofString s }
+        Pitch ->
+            { m | pitch = Cisp.ofString s }
 
-        Velo -> { m | velo = Cisp.ofString s }
+        Velo ->
+            { m | velo = Cisp.ofString s }
 
-        Duration -> { m | duration = Cisp.ofString s }
+        Duration ->
+            { m | duration = Cisp.ofString s }
 
-        Channel -> { m | channel = Cisp.ofString s } 
+        Channel ->
+            { m | channel = Cisp.ofString s }
 
 
-
-
-
-update : Msg -> OneVoice -> (OneVoice, Maybe Action)
+update : Msg -> OneVoice -> ( OneVoice, Maybe Action )
 update msg m =
     case msg of
         Set p ->
-            (m,Just (setParameter p m))
+            ( m, Just (setParameter p m) )
 
         Change p s ->
-            (changeParameter p s m, Nothing)
-
-    
+            ( changeParameter p s m, Nothing )
 
 
 parAsString : Parameter -> String

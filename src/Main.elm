@@ -13,6 +13,7 @@ import Json.Decode as JD
 import Json.Encode as JE
 import Parser exposing (Parser)
 import WebSocket exposing (WebSocketCmd(..))
+import OneVoice exposing (OneVoice)
 
 
 port receiveSocketMsg : (JD.Value -> msg) -> Sub msg
@@ -25,6 +26,7 @@ type Model
     = Model
         { cisp : CispProgram
         , custom : String
+        , cisps : List OneVoice
         }
 
 
