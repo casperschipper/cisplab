@@ -1,6 +1,6 @@
 module Cisp exposing (..)
-import Parser exposing (Parser)
 
+import Parser exposing (Parser)
 
 type Sexpr
     = Slist (List Sexpr)
@@ -17,12 +17,13 @@ type CispProgram
     = Invalid String
     | Valid String
 
+
 ofString : String -> CispProgram
 ofString s =
     case Parser.run clist s of
         Ok _ ->
             Valid s
-        
+
         Err _ ->
             Invalid s
 

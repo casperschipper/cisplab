@@ -1,8 +1,9 @@
 module OneVoice exposing (..)
 
 import Cisp exposing (CispProgram, cispAsString)
-import Element exposing (Element, column, fill, width)
+import Element exposing (Element, column, fill, px, width)
 import Element.Input as Input
+import Parameter exposing (Parameter(..))
 
 
 type alias OneVoice =
@@ -12,18 +13,14 @@ type alias OneVoice =
     , duration : CispProgram
     }
 
-init : OneVoice 
+
+init : OneVoice
 init =
-    { pitch = Cisp.ofString "(st 60)" 
+    { pitch = Cisp.ofString "(st 60)"
     , velo = Cisp.ofString "(st 100)"
     , channel = Cisp.ofString "(st 1)"
-    , duration = Cisp.ofString "(st 0.1)" }
-
-type Parameter
-    = Pitch
-    | Velo
-    | Duration
-    | Channel
+    , duration = Cisp.ofString "(st 0.1)"
+    }
 
 
 type Msg
@@ -68,34 +65,24 @@ update msg m =
             ( changeParameter p s m, Nothing )
 
 
-parAsString : Parameter -> String
-parAsString p =
-    case p of
-        Pitch ->
-            "pitch"
-
-        Velo ->
-            "velo"
-
-        Duration ->
-            "duration"
-
-        Channel ->
-            "channel"
-
-
 parView : Parameter -> CispProgram -> Element Msg
 parView p c =
     let
         str =
             cispAsString c
     in
-    Input.text []
-        { onChange = Change p
-        , text = cispAsString c
-        , label = Input.labelAbove [] (Element.text (parAsString p))
-        , placeholder = Nothing
-        }
+    Element.row [ width fill ]
+        [ Input.text [ width fill ]
+            { onChange = Change p
+            , text = cispAsString c
+            , label = Input.labelAbove [] (Element.text (Parameter.toString p))
+            , placeholder = Nothing
+            }
+        , Input.button [ width (px 100) ]
+            { onPress = Just (Set p)
+            , label = Element.text "set!"
+            }
+        ]
 
 
 view : OneVoice -> Element Msg

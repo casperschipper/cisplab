@@ -13,7 +13,9 @@ import Json.Decode as JD
 import Json.Encode as JE
 import Parser exposing (Parser)
 import WebSocket exposing (WebSocketCmd(..))
-import OneVoice exposing (OneVoice)
+import OneVoice exposing (OneVoice, Action (..))
+import Array exposing (Array)
+import Parameter exposing (Parameter)
 
 
 port receiveSocketMsg : (JD.Value -> msg) -> Sub msg
@@ -26,7 +28,7 @@ type Model
     = Model
         { cisp : CispProgram
         , custom : String
-        , cisps : List OneVoice
+        , cisps : Array OneVoice
         }
 
 
@@ -39,6 +41,14 @@ getCisp : Model -> CispProgram
 getCisp (Model model) =
     model.cisp
 
+getCisps : Model -> Array OneVoice
+getCisps (Model m) =
+    m.cisps
+
+setCisps : Array OneVoice -> Model -> Model 
+setCisps cisps (Model m) =
+    Model { m | cisps = cisps }
+
 
 type Msg
     = CispString String
@@ -46,6 +56,7 @@ type Msg
     | SendMessage String
     | SetCustom String
     | SendCustom
+    | VoiceMsg Int OneVoice.Msg
 
 
 input : String
@@ -64,7 +75,7 @@ init _ =
                 }
                 |> wssend
     in
-    Model { cisp = Invalid "", custom = "" } |> update (CispString input) |> Tuple.mapSecond (\_ -> websocketCmd)
+    Model { cisp = Invalid "", custom = "", cisps = Array.fromList [OneVoice.init]  } |> update (CispString input) |> Tuple.mapSecond (\_ -> websocketCmd)
 
 
 main : Platform.Program () Model Msg
@@ -126,10 +137,17 @@ buttonStyle =
 
 
 display : Model -> Html Msg
-display (Model { cisp, custom }) =
+display (Model { cisp, custom, cisps }) =
     let
         textInputStyle =
             [ Element.centerX, Element.width (Element.px 1000) ]
+
+        cispsView = 
+            Element.column [Element.width Element.fill] (
+                cisps 
+                    |> Array.indexedMap (\idx voice -> Element.map (\v -> VoiceMsg idx v) (OneVoice.view voice)) 
+                    |> Array.toList
+            )
     in
     Element.layout
         [ Element.width Element.fill, Element.Background.color black ]
@@ -157,6 +175,7 @@ display (Model { cisp, custom }) =
                 , label = Element.Input.labelAbove [] <| Element.text "custom ws mesage"
                 }
             , Element.Input.button buttonStyle { onPress = Just SendCustom, label = Element.text "send custom" }
+            , cispsView
             ]
         )
 
@@ -171,10 +190,10 @@ update msg model =
             in
             case result of
                 Ok _ ->
-                    ( Model { cisp = Valid str, custom = getCustom model }, Cmd.none )
+                    ( Model { cisp = Valid str, custom = getCustom model, cisps = getCisps model }, Cmd.none )
 
                 Err _ ->
-                    ( Model { cisp = Invalid str, custom = getCustom model }, Cmd.none )
+                    ( Model { cisp = Invalid str, custom = getCustom model, cisps = getCisps model }, Cmd.none )
 
         ReceivedFrame result ->
             let
@@ -216,6 +235,40 @@ update msg model =
 
         SendCustom ->
             ( model, WebSocket.Send { name = "cisp", content = getCustom model } |> wssend )
+
+        VoiceMsg idx vmsg ->
+            let 
+                mVoiceAction = 
+                    Array.get idx (getCisps model)
+                    |> Maybe.map (OneVoice.update vmsg)
+
+                (updatedCisps,cmd) = 
+                    case mVoiceAction of
+                        Just (v,act) ->
+                            (Array.set idx v (getCisps model), handleAction idx act)
+
+                        Nothing ->
+                            (getCisps model, Cmd.none)
+                    
+            in
+            (setCisps updatedCisps model, cmd)
+
+handleAction : Int -> Maybe Action -> Cmd Msg 
+handleAction n action =
+    case action of
+        Nothing -> Cmd.none
+
+        Just (Update par str) -> 
+            let
+                istr = String.fromInt n 
+
+                address = String.join "/" [istr,Parameter.toString par]
+            in
+                WebSocket.Send { name = "cisp",  content = "/" ++ address ++ " " ++ str} |> wssend
+
+
+            
+        
 
 
 subscriptions : Model -> Sub Msg
