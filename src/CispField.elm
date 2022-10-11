@@ -15,6 +15,11 @@ type Msg
     | KeyDown Keyboard.RawKey
 
 
+init : Model 
+init =
+    { keyState = []
+    , field = "" }
+
 update : Msg -> Model -> Model
 update msg model =
     case msg of

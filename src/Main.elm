@@ -1,7 +1,9 @@
 port module Main exposing (Model(..), Msg(..), black, buttonStyle, color, colorize, cvalueToElement, display, getCisp, getCustom, init, input, leftColon, main, makeTree, receiveSocketMsg, renderTree, rightColon, sendSocketCommand, space, subscriptions, update, view, viewChar, white, wssend)
 
+import Array exposing (Array)
 import Browser exposing (Document)
 import Cisp exposing (..)
+import CispField
 import Element exposing (Element)
 import Element.Background
 import Element.Border
@@ -11,11 +13,10 @@ import Html exposing (Html)
 import Html.Events exposing (custom)
 import Json.Decode as JD
 import Json.Encode as JE
+import OneVoice exposing (Action(..), OneVoice)
+import Parameter exposing (Parameter)
 import Parser exposing (Parser)
 import WebSocket exposing (WebSocketCmd(..))
-import OneVoice exposing (OneVoice, Action (..))
-import Array exposing (Array)
-import Parameter exposing (Parameter)
 
 
 port receiveSocketMsg : (JD.Value -> msg) -> Sub msg
@@ -29,6 +30,7 @@ type Model
         { cisp : CispProgram
         , custom : String
         , cisps : Array OneVoice
+        , cispField : CispField.Model
         }
 
 
@@ -41,13 +43,20 @@ getCisp : Model -> CispProgram
 getCisp (Model model) =
     model.cisp
 
+
 getCisps : Model -> Array OneVoice
 getCisps (Model m) =
     m.cisps
 
-setCisps : Array OneVoice -> Model -> Model 
+
+setCisps : Array OneVoice -> Model -> Model
 setCisps cisps (Model m) =
     Model { m | cisps = cisps }
+
+
+getCispField : Model -> CispField.Model
+getCispField (Model model) =
+    model.cispField
 
 
 type Msg
@@ -57,6 +66,7 @@ type Msg
     | SetCustom String
     | SendCustom
     | VoiceMsg Int OneVoice.Msg
+    | CispFieldMsg CispField.Msg
 
 
 input : String
@@ -75,7 +85,7 @@ init _ =
                 }
                 |> wssend
     in
-    Model { cisp = Invalid "", custom = "", cisps = Array.fromList [OneVoice.init]  } |> update (CispString input) |> Tuple.mapSecond (\_ -> websocketCmd)
+    Model { cisp = Invalid "", custom = "", cisps = Array.fromList [ OneVoice.init ], cispField = CispField.init } |> update (CispString input) |> Tuple.mapSecond (\_ -> websocketCmd)
 
 
 main : Platform.Program () Model Msg
@@ -137,17 +147,17 @@ buttonStyle =
 
 
 display : Model -> Html Msg
-display (Model { cisp, custom, cisps }) =
+display (Model { cisp, custom, cisps, cispField }) =
     let
         textInputStyle =
             [ Element.centerX, Element.width (Element.px 1000) ]
 
-        cispsView = 
-            Element.column [Element.width Element.fill] (
-                cisps 
-                    |> Array.indexedMap (\idx voice -> Element.map (\v -> VoiceMsg idx v) (OneVoice.view voice)) 
+        cispsView =
+            Element.column [ Element.width Element.fill ]
+                (cisps
+                    |> Array.indexedMap (\idx voice -> Element.map (\v -> VoiceMsg idx v) (OneVoice.view voice))
                     |> Array.toList
-            )
+                )
     in
     Element.layout
         [ Element.width Element.fill, Element.Background.color black ]
@@ -157,7 +167,7 @@ display (Model { cisp, custom, cisps }) =
                 , text = cispAsString cisp
                 , placeholder = Nothing
                 , label = Element.Input.labelAbove [ Element.Font.color white ] <| Element.text "CISP:"
-                } 
+                }
             , colorize (cispAsString cisp)
             , case cisp of
                 Valid csp ->
@@ -176,6 +186,7 @@ display (Model { cisp, custom, cisps }) =
                 }
             , Element.Input.button buttonStyle { onPress = Just SendCustom, label = Element.text "send custom" }
             , cispsView
+            , Element.map CispFieldMsg (CispField.view cispField)
             ]
         )
 
@@ -190,10 +201,10 @@ update msg model =
             in
             case result of
                 Ok _ ->
-                    ( Model { cisp = Valid str, custom = getCustom model, cisps = getCisps model }, Cmd.none )
+                    ( Model { cisp = Valid str, custom = getCustom model, cisps = getCisps model, cispField = getCispField model }, Cmd.none )
 
                 Err _ ->
-                    ( Model { cisp = Invalid str, custom = getCustom model, cisps = getCisps model }, Cmd.none )
+                    ( Model { cisp = Invalid str, custom = getCustom model, cisps = getCisps model, cispField = getCispField model }, Cmd.none )
 
         ReceivedFrame result ->
             let
@@ -237,43 +248,52 @@ update msg model =
             ( model, WebSocket.Send { name = "cisp", content = getCustom model } |> wssend )
 
         VoiceMsg idx vmsg ->
-            let 
-                mVoiceAction = 
+            let
+                mVoiceAction =
                     Array.get idx (getCisps model)
-                    |> Maybe.map (OneVoice.update vmsg)
+                        |> Maybe.map (OneVoice.update vmsg)
 
-                (updatedCisps,cmd) = 
+                ( updatedCisps, cmd ) =
                     case mVoiceAction of
-                        Just (v,act) ->
-                            (Array.set idx v (getCisps model), handleAction idx act)
+                        Just ( v, act ) ->
+                            ( Array.set idx v (getCisps model), handleAction idx act )
 
                         Nothing ->
-                            (getCisps model, Cmd.none)
-                    
+                            ( getCisps model, Cmd.none )
             in
-            (setCisps updatedCisps model, cmd)
+            ( setCisps updatedCisps model, cmd )
 
-handleAction : Int -> Maybe Action -> Cmd Msg 
+        CispFieldMsg cmsg ->
+            case model of
+                Model m ->
+                    (Model { m | cispField = (CispField.update cmsg (getCispField model)) }, Cmd.none)
+
+        
+
+
+handleAction : Int -> Maybe Action -> Cmd Msg
 handleAction n action =
     case action of
-        Nothing -> Cmd.none
+        Nothing ->
+            Cmd.none
 
-        Just (Update par str) -> 
+        Just (Update par str) ->
             let
-                istr = String.fromInt n 
+                istr =
+                    String.fromInt n
 
-                address = String.join "/" [istr,Parameter.toString par]
+                address =
+                    String.join "/" [ istr, Parameter.toString par ]
             in
-                WebSocket.Send { name = "cisp",  content = "/" ++ address ++ " " ++ str} |> wssend
-
-
-            
-        
+            WebSocket.Send { name = "cisp", content = "/" ++ address ++ " " ++ str } |> wssend
 
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    receiveSocketMsg <| WebSocket.receive ReceivedFrame
+    Sub.batch [
+        receiveSocketMsg <| WebSocket.receive ReceivedFrame
+        , Sub.map CispFieldMsg CispField.subscriptions 
+    ]
 
 
 wssend : WebSocketCmd -> Cmd msg
