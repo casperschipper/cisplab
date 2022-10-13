@@ -1,6 +1,6 @@
 module OneVoice exposing (..)
 
-import Cisp exposing (CispProgram, cispAsString)
+import Cisp exposing (CispProgram, cispAsString, sexpr)
 import Element exposing (Element, column, fill, px, width)
 import Element.Input as Input
 import Parameter exposing (Parameter(..))

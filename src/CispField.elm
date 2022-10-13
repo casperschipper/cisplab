@@ -1,7 +1,10 @@
 module CispField exposing (..)
 
-import Keyboard
 import Element exposing (Element)
+import Keyboard
+import Parser 
+import Cisp 
+import Element
 
 
 type alias Model =
@@ -15,10 +18,50 @@ type Msg
     | KeyDown Keyboard.RawKey
 
 
-init : Model 
+init : Model
 init =
     { keyState = []
-    , field = "" }
+    , field = ""
+    }
+
+
+allowedSymbols : Char -> Bool
+allowedSymbols c =
+    let
+        allowed =
+            String.toList "()+-*/_ "
+    in
+    List.member c allowed 
+
+
+filter : String -> String
+filter str =
+    let
+        singleChar s =
+            case String.length s of
+                1 ->
+                    Just s
+
+                _ ->
+                    Nothing
+
+        alphnum s =
+            case String.toList s of
+                [] ->
+                    Nothing
+
+                c :: _ ->
+                    if Char.isAlphaNum c || allowedSymbols c then
+                        Just (String.fromChar c)
+
+                    else
+                        Nothing
+    in
+    str
+        |> singleChar
+        |> Maybe.andThen alphnum
+        |> Maybe.withDefault ""
+
 
 update : Msg -> Model -> Model
 update msg model =
@@ -32,7 +75,7 @@ update msg model =
                     }
 
                 any ->
-                    { model | field = model.field ++ any }
+                    { model | field = model.field ++ filter any }
 
         KeyUp raw ->
             let
@@ -41,12 +84,16 @@ update msg model =
             in
             model
 
-view : Model -> Element Msg 
+
+
+view : Model -> Element Msg
 view model =
-    Element.text (model.field)
+    Cisp.colorize model.field
+
 
 subscriptions =
     Sub.batch
         [ Keyboard.ups KeyUp
         , Keyboard.downs KeyDown
         ]
+

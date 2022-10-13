@@ -1,4 +1,4 @@
-port module Main exposing (Model(..), Msg(..), black, buttonStyle, color, colorize, cvalueToElement, display, getCisp, getCustom, init, input, leftColon, main, makeTree, receiveSocketMsg, renderTree, rightColon, sendSocketCommand, space, subscriptions, update, view, viewChar, white, wssend)
+port module Main exposing (Model(..), Msg(..), black, buttonStyle, display, getCisp, getCispField, getCisps, getCustom, handleAction, init, input, main, receiveSocketMsg, sendSocketCommand, setCisps, subscriptions, update, view, viewChar, white, wssend)
 
 import Array exposing (Array)
 import Browser exposing (Document)
@@ -110,23 +110,6 @@ view model =
     }
 
 
-colorize : String -> Element Msg
-colorize cispString =
-    let
-        result =
-            Parser.run sexpr cispString
-
-        _ =
-            Debug.log "result:\n" result
-    in
-    case result of
-        Ok res ->
-            res |> makeTree |> renderTree
-
-        Err _ ->
-            Element.text "oh no!"
-
-
 black : Element.Color
 black =
     Element.rgb 1.0 1.0 1.0
@@ -168,7 +151,7 @@ display (Model { cisp, custom, cisps, cispField }) =
                 , placeholder = Nothing
                 , label = Element.Input.labelAbove [ Element.Font.color white ] <| Element.text "CISP:"
                 }
-            , colorize (cispAsString cisp)
+            , Cisp.colorize (cispAsString cisp)
             , case cisp of
                 Valid csp ->
                     Element.Input.button buttonStyle
@@ -266,9 +249,7 @@ update msg model =
         CispFieldMsg cmsg ->
             case model of
                 Model m ->
-                    (Model { m | cispField = (CispField.update cmsg (getCispField model)) }, Cmd.none)
-
-        
+                    ( Model { m | cispField = CispField.update cmsg (getCispField model) }, Cmd.none )
 
 
 handleAction : Int -> Maybe Action -> Cmd Msg
@@ -290,102 +271,12 @@ handleAction n action =
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    Sub.batch [
-        receiveSocketMsg <| WebSocket.receive ReceivedFrame
-        , Sub.map CispFieldMsg CispField.subscriptions 
-    ]
+    Sub.batch
+        [ receiveSocketMsg <| WebSocket.receive ReceivedFrame
+        , Sub.map CispFieldMsg CispField.subscriptions
+        ]
 
 
 wssend : WebSocketCmd -> Cmd msg
 wssend =
     WebSocket.send sendSocketCommand
-
-
-makeTree : Sexpr -> Tree CValue
-makeTree expr =
-    let
-        aux d e =
-            case e of
-                Slist lst ->
-                    Tree d (lst |> List.map (aux (d + 1)))
-
-                Value v ->
-                    Node v
-    in
-    aux 0 expr
-
-
-color : Int -> Element.Color
-color c =
-    let
-        rgb =
-            Element.rgb255
-    in
-    case modBy 6 c of
-        0 ->
-            rgb 200 30 30
-
-        1 ->
-            rgb 30 200 30
-
-        2 ->
-            rgb 30 30 200
-
-        3 ->
-            rgb 50 50 100
-
-        4 ->
-            rgb 100 50 50
-
-        5 ->
-            rgb 100 100 100
-
-        _ ->
-            rgb 200 100 200
-
-
-leftColon : Element.Color -> Element msg
-leftColon cattr =
-    Element.el [ Element.Font.color cattr ] <| Element.text "("
-
-
-rightColon : Element.Color -> Element msg
-rightColon cattr =
-    Element.el [ Element.Font.color cattr ] <| Element.text ")"
-
-
-space : Element msg
-space =
-    Element.el [] (Element.text " ")
-
-
-cvalueToElement : CValue -> Element Msg
-cvalueToElement cvalue =
-    case cvalue of
-        CNumber flt ->
-            Element.text (String.fromFloat flt) |> Element.el [ Element.Font.color (Element.rgb 0.0 0.4 0.0) ]
-
-        CString str ->
-            Element.text str |> Element.el [ Element.Font.color (Element.rgb 0.0 1.0 1.0) ]
-
-        CispWord str ->
-            Element.text str |> Element.el [ Element.Font.color (Element.rgb 0.4 0.5 0.0) ]
-
-
-renderTree : Tree CValue -> Element Msg
-renderTree tree =
-    case tree of
-        Tree n lst ->
-            let
-                clr =
-                    color n
-
-                chars =
-                    List.map renderTree lst
-                        |> List.intersperse space
-                        |> (\xs -> leftColon clr :: xs ++ [ rightColon clr ])
-            in
-            Element.paragraph [] chars
-
-        Node v ->
-            cvalueToElement v
