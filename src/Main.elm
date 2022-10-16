@@ -169,7 +169,7 @@ display (Model { cisp, custom, cisps, cispField }) =
                 }
             , Element.Input.button buttonStyle { onPress = Just SendCustom, label = Element.text "send custom" }
             , cispsView
-            , Element.map CispFieldMsg (CispField.view cispField)
+            , CispField.view CispFieldMsg cispField
             ]
         )
 
@@ -280,3 +280,4 @@ subscriptions _ =
 wssend : WebSocketCmd -> Cmd msg
 wssend =
     WebSocket.send sendSocketCommand
+ 

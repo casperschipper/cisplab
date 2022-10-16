@@ -2,14 +2,13 @@ module CispField exposing (..)
 
 import Element exposing (Element)
 import Keyboard
-import Parser 
-import Cisp 
-import Element
+import Array exposing (Array)
+import Cisp
 
 
 type alias Model =
     { keyState : List Keyboard.Key
-    , field : String
+    , field : Array Char
     }
 
 
@@ -21,7 +20,7 @@ type Msg
 init : Model
 init =
     { keyState = []
-    , field = ""
+    , field = Array.empty
     }
 
 
@@ -34,34 +33,27 @@ allowedSymbols c =
     List.member c allowed 
 
 
-filter : String -> String
+filter : String -> Maybe Char
 filter str =
     let
         singleChar s =
-            case String.length s of
-                1 ->
-                    Just s
+            case String.toList s of
+                [c] ->
+                    Just c
 
                 _ ->
                     Nothing
 
-        alphnum s =
-            case String.toList s of
-                [] ->
-                    Nothing
+        alphnum c =
+            if Char.isAlphaNum c || allowedSymbols c then
+                Just c
 
-                c :: _ ->
-                    if Char.isAlphaNum c || allowedSymbols c then
-                        Just (String.fromChar c)
-
-                    else
-                        Nothing
+            else
+                Nothing
     in
     str
         |> singleChar
         |> Maybe.andThen alphnum
-        |> Maybe.withDefault ""
-
 
 update : Msg -> Model -> Model
 update msg model =
@@ -71,11 +63,14 @@ update msg model =
                 "Backspace" ->
                     { model
                         | field =
-                            String.dropRight 1 model.field
+                            Array.slice 0 ((Array.length model.field) - 1) model.field
                     }
 
                 any ->
-                    { model | field = model.field ++ filter any }
+                    { model | field = case filter any of
+                            Just c -> Array.push c model.field
+                            
+                            Nothing -> model.field }
 
         KeyUp raw ->
             let
@@ -84,11 +79,13 @@ update msg model =
             in
             model
 
+arrayToString arr =
+    arr |> Array.toList |> String.fromList 
 
 
-view : Model -> Element Msg
-view model =
-    Cisp.colorize model.field
+view : (Msg -> msg) -> Model -> Element msg
+view toMsg model =
+    Cisp.colorize (model.field |> arrayToString)
 
 
 subscriptions =

@@ -51,6 +51,11 @@ cispwords =
     , "cycle"
     , "st"
     , "index"
+    , "+"
+    , "-"
+    , "/"
+    , "~"
+    , "t"
     ]
 
 
@@ -217,4 +222,4 @@ colorize cispString =
             res |> makeTree |> renderTree
 
         Err _ ->
-            Element.text ("~" ++ cispString)
+            Element.el [Element.Font.underline] (Element.text (cispString))
