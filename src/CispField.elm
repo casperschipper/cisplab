@@ -1,8 +1,11 @@
 module CispField exposing (..)
 
 import Array exposing (Array)
+import Array.Extra exposing (insertAt)
 import Cisp
 import Element exposing (Element)
+import Element.Events
+import Element.Font
 import Keyboard
 
 
@@ -16,6 +19,7 @@ type alias Model =
 type Msg
     = KeyUp Keyboard.RawKey
     | KeyDown Keyboard.RawKey
+    | ClickedElement Int
 
 
 init : Model
@@ -87,15 +91,36 @@ update msg model =
             in
             model
 
+        ClickedElement idx ->
+            { model | cursorIndex = idx }
+
+
+cursor : Element.Element msg
+cursor =
+    Element.el [ Element.Font.color (Element.rgb 1.0 0.0 0.0) ] (Element.text "|")
+
 
 arrayToString : Array Char -> String
 arrayToString arr =
     arr |> Array.toList |> String.fromList
 
 
+addPlaceCursorEvent arr =
+    let
+        f idx elm =
+            Element.el [ Element.Events.onClick (ClickedElement idx) ] elm
+    in
+    List.indexedMap f arr
+
+
+insertAtList idx a lst =
+    lst |> Array.fromList |> Array.Extra.insertAt idx a |> Array.toList
+
+
 view : (Msg -> msg) -> Model -> Element msg
 view toMsg model =
-    Element.paragraph [] (Cisp.colorize (model.field |> arrayToString))
+    Element.map toMsg
+        (Element.paragraph [] (Cisp.colorize (model.field |> arrayToString) |> addPlaceCursorEvent |> insertAtList model.cursorIndex cursor))
 
 
 subscriptions =
