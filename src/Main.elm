@@ -151,7 +151,6 @@ display (Model { cisp, custom, cisps, cispField }) =
                 , placeholder = Nothing
                 , label = Element.Input.labelAbove [ Element.Font.color white ] <| Element.text "CISP:"
                 }
-            , Cisp.colorize (cispAsString cisp)
             , case cisp of
                 Valid csp ->
                     Element.Input.button buttonStyle

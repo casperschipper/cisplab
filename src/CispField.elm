@@ -1,14 +1,15 @@
 module CispField exposing (..)
 
-import Element exposing (Element)
-import Keyboard
 import Array exposing (Array)
 import Cisp
+import Element exposing (Element)
+import Keyboard
 
 
 type alias Model =
     { keyState : List Keyboard.Key
     , field : Array Char
+    , cursorIndex : Int
     }
 
 
@@ -21,6 +22,7 @@ init : Model
 init =
     { keyState = []
     , field = Array.empty
+    , cursorIndex = 0
     }
 
 
@@ -30,7 +32,7 @@ allowedSymbols c =
         allowed =
             String.toList "()+-*/_ "
     in
-    List.member c allowed 
+    List.member c allowed
 
 
 filter : String -> Maybe Char
@@ -38,7 +40,7 @@ filter str =
     let
         singleChar s =
             case String.toList s of
-                [c] ->
+                [ c ] ->
                     Just c
 
                 _ ->
@@ -55,6 +57,7 @@ filter str =
         |> singleChar
         |> Maybe.andThen alphnum
 
+
 update : Msg -> Model -> Model
 update msg model =
     case msg of
@@ -63,14 +66,19 @@ update msg model =
                 "Backspace" ->
                     { model
                         | field =
-                            Array.slice 0 ((Array.length model.field) - 1) model.field
+                            Array.slice 0 (Array.length model.field - 1) model.field
                     }
 
                 any ->
-                    { model | field = case filter any of
-                            Just c -> Array.push c model.field
-                            
-                            Nothing -> model.field }
+                    { model
+                        | field =
+                            case filter any of
+                                Just c ->
+                                    Array.push c model.field
+
+                                Nothing ->
+                                    model.field
+                    }
 
         KeyUp raw ->
             let
@@ -79,13 +87,15 @@ update msg model =
             in
             model
 
+
+arrayToString : Array Char -> String
 arrayToString arr =
-    arr |> Array.toList |> String.fromList 
+    arr |> Array.toList |> String.fromList
 
 
 view : (Msg -> msg) -> Model -> Element msg
 view toMsg model =
-    Cisp.colorize (model.field |> arrayToString)
+    Element.paragraph [] (Cisp.colorize (model.field |> arrayToString))
 
 
 subscriptions =
@@ -93,4 +103,3 @@ subscriptions =
         [ Keyboard.ups KeyUp
         , Keyboard.downs KeyDown
         ]
-

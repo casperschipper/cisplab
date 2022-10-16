@@ -136,23 +136,26 @@ makeTree expr =
     in
     aux 0 expr
 
-renderTree : Tree CValue -> Element.Element msg
+renderTree : Tree CValue -> List (Element.Element msg)
 renderTree tree =
     case tree of
-        Tree n lst ->
+        Tree n [] -> 
+            []
+
+        Tree n (x::xs) ->
             let
                 clr =
                     color n
 
                 chars =
-                    List.map renderTree lst
+                    (renderTree x) ++ (renderTree (Tree n xs))
                         |> List.intersperse space
-                        |> (\xs -> leftColon clr :: xs ++ [ rightColon clr ])
+                        |> (\lst -> (leftColon clr) :: lst ++ [ rightColon clr ])
             in
-            Element.paragraph [] chars
+            chars
 
         Node v ->
-            cvalueToElement v
+            [ cvalueToElement v ]
 
 
 cvalueToElement : CValue -> Element msg
@@ -208,7 +211,7 @@ space : Element msg
 space =
     Element.el [] (Element.text " ")
 
-colorize : String -> Element msg
+colorize : String -> List (Element msg)
 colorize cispString =
     let
         result =
@@ -222,4 +225,4 @@ colorize cispString =
             res |> makeTree |> renderTree
 
         Err _ ->
-            Element.el [Element.Font.underline] (Element.text (cispString))
+            [Element.el [Element.Font.underline] (Element.text (cispString))]
