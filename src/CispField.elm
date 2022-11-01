@@ -25,7 +25,7 @@ type Msg
 init : Model
 init =
     { keyState = []
-    , field = Array.empty
+    , field = Array.fromList <| String.toList <| "(seq 1 2)"
     , cursorIndex = 0
     }
 
@@ -68,26 +68,41 @@ update msg model =
         KeyDown raw ->
             case Keyboard.rawValue raw of
                 "Backspace" ->
+                    let
+                        prev =
+                            max (model.cursorIndex - 1) 0
+                    in
                     { model
                         | field =
-                            Array.slice 0 (Array.length model.field - 1) model.field
+                            Array.Extra.removeAt prev model.field
+                        , cursorIndex = prev
                     }
+
+                "ArrowLeft" ->
+                    { model | cursorIndex = max (model.cursorIndex - 1) 0 }
+
+                "ArrowRight" ->
+                    { model | cursorIndex = min (model.cursorIndex + 1) (Array.length model.field) }
 
                 any ->
-                    { model
-                        | field =
-                            case filter any of
-                                Just c ->
-                                    Array.push c model.field
+                    case filter any of
+                        Just c ->
+                            { model
+                                | field = insertAt model.cursorIndex c model.field
+                                , cursorIndex = model.cursorIndex + 1
+                            }
 
-                                Nothing ->
-                                    model.field
-                    }
+                        Nothing ->
+                            let
+                                _ =
+                                    Debug.log "ignored key: " any
+                            in
+                            model
 
         KeyUp raw ->
             let
                 _ =
-                    Debug.log "fish" (Keyboard.rawValue raw)
+                    Debug.log "keyup" (Keyboard.rawValue raw)
             in
             model
 
@@ -120,7 +135,12 @@ insertAtList idx a lst =
 view : (Msg -> msg) -> Model -> Element msg
 view toMsg model =
     Element.map toMsg
-        (Element.paragraph [] (Cisp.colorize (model.field |> arrayToString) |> addPlaceCursorEvent |> insertAtList model.cursorIndex cursor))
+        (Cisp.colorize
+        (model.field |> arrayToString)
+        |> List.map Cisp.toElem
+        |> addPlaceCursorEvent
+        |> insertAtList model.cursorIndex cursor
+        |> Element.paragraph [])
 
 
 subscriptions =

@@ -1,12 +1,25 @@
 module Cisp exposing (..)
 
-import Parser exposing (Parser)
 import Element exposing (Element)
 import Element.Font
+import Html exposing (b)
+import Parser exposing ((|.), (|=), Parser, getChompedString)
+
+
+type Depth
+    = Depth Int
+
+
+increase (Depth d) =
+    Depth (d + 1)
+
 
 type Sexpr
     = Slist (List Sexpr)
     | Value CValue
+    | ParOpen Depth
+    | ParClose Depth
+    | Space
 
 
 type CValue
@@ -22,7 +35,7 @@ type CispProgram
 
 ofString : String -> CispProgram
 ofString s =
-    case Parser.run clist s of
+    case Parser.run sexpr s of
         Ok _ ->
             Valid s
 
@@ -59,15 +72,6 @@ cispwords =
     ]
 
 
-type alias Depth =
-    Int
-
-
-type Tree a
-    = Node a
-    | Tree Depth (List (Tree a))
-
-
 type CispWord
     = Seq
 
@@ -100,77 +104,129 @@ value =
         ]
 
 
-clist : Parser Sexpr
-clist =
-    Parser.sequence
-        { start = "("
-        , separator = " "
-        , end = ")"
-        , spaces = Parser.succeed ()
-        , item =
-            Parser.oneOf
-                [ Parser.lazy (\_ -> sexpr) -- hmm why does this one have to come first ?
-                , value |> Parser.map Value
-                ]
-        , trailing = Parser.Forbidden
-        }
-        |> Parser.map Slist
+parseSpace : Parser (List Sexpr)
+parseSpace =
+    Parser.chompWhile (\c -> c == ' ' || c == '\n' || c == '\u{000D}')
+        |> Parser.getChompedString
+        |> Parser.map
+            (\str ->
+                String.length str |> (\n -> List.repeat n Space)
+            )
+
+
+complete : Parser Sexpr
+complete =
+    let
+        helper depth expression_lst =
+            parseSpace
+                |> Parser.andThen
+                    (\spaces ->
+                        Parser.oneOf -- OK IT is important that you first do the recursive case !! but why ??
+                            [ Parser.succeed identity
+                                |. Parser.symbol "("
+                                |= (Parser.loop [] (helper (increase depth)) |> Parser.map (\v -> Parser.Loop (v :: expression_lst)))
+                            , Parser.symbol ")"
+                                |> Parser.map (\_ -> Parser.Done (Slist (ParOpen depth :: List.reverse (ParClose depth :: expression_lst))))
+                            , value |> Parser.map (\v -> Parser.Loop (Value v :: expression_lst))
+                            , Parser.end
+                                |> Parser.andThen (\_ -> Parser.problem "expecting closing parenthesis: )")
+                            ]
+                    )
+    in
+    -- Parser.succeed (ParClose (Depth 0))
+    Parser.succeed identity
+        |. Parser.symbol "("
+        |= Parser.loop [] (helper (Depth 0))
+
+
+
+-- clist : Depth -> Parser Sexpr
+-- clist depth =
+--     Parser.sequence
+--         { start = "("
+--         , separator = " "
+--         , end = ")"
+--         , spaces = Parser.succeed ()
+--         , item =
+--             Parser.oneOf
+--                 [ Parser.lazy (\_ -> clist (increase depth)) -- hmm why does this one have to come first ?
+--                 , value |> Parser.map Value
+--                 ]
+--         , trailing = Parser.Forbidden
+--         }
+--         |> Parser.map Slist
 
 
 sexpr : Parser Sexpr
 sexpr =
-    clist
+    complete
+
+
+type HighlightedChars
+    = Colored Char Element.Color
+    | Uncolored Char
 
 
 
-makeTree : Sexpr -> Tree CValue
-makeTree expr =
-    let
-        aux d e =
-            case e of
-                Slist lst ->
-                    Tree d (lst |> List.map (aux (d + 1)))
+{-
+   colorTree : Tree CValue -> Tree (Colored CValue)
+   colorTree tree =
+       case tree of
+           Tree n [] ->
+               Tree n []
 
-                Value v ->
-                    Node v
-    in
-    aux 0 expr
+           Tree n lst ->
+               let clr =
+                   color n
 
-renderTree : Tree CValue -> List (Element.Element msg)
-renderTree tree =
-    case tree of
-        Tree n [] -> 
+                   chars =
+                        lst
+                           |> List.concatMap colorTree
+                           |> (\xs -> leftColon clr :: List.intersperse space xs ++ [ rightColon clr ])
+               in
+               chars
+
+           Node v ->
+-}
+
+
+renderTree : Sexpr -> List HighlightedChars
+renderTree exp =
+    case exp of
+        Slist [] ->
             []
 
-        Tree n (x::xs) ->
-            let
-                clr =
-                    color n
+        Slist lst ->
+            lst |> List.concatMap renderTree
 
-                chars =
-                    (renderTree x) ++ (renderTree (Tree n xs))
-                        |> List.intersperse space
-                        |> (\lst -> (leftColon clr) :: lst ++ [ rightColon clr ])
-            in
-            chars
+        Value v ->
+            cvalueToElement v
 
-        Node v ->
-            [ cvalueToElement v ]
+        ParClose d ->
+            [ Colored ')' (ofDepth d) ]
+
+        ParOpen d ->
+            [ Colored '(' (ofDepth d) ]
+
+        Space ->
+            [ Uncolored ' ' ]
 
 
-cvalueToElement : CValue -> Element msg
+cvalueToElement : CValue -> List HighlightedChars
 cvalueToElement cvalue =
     case cvalue of
         CNumber flt ->
-            Element.text (String.fromFloat flt) |> Element.el [ Element.Font.color (Element.rgb 0.0 0.4 0.0) ]
+            flt |> String.fromFloat |> String.toList |> List.map (\c -> Colored c (Element.rgb 0.0 0.4 0.0))
 
         CString str ->
-            Element.text str |> Element.el [ Element.Font.color (Element.rgb 0.0 1.0 1.0) ]
+            str |> String.toList |> List.map (\c -> Colored c (Element.rgb 0.4 0.4 0.0))
 
         CispWord str ->
-            Element.text str |> Element.el [ Element.Font.color (Element.rgb 0.4 0.5 0.0) ]
-color : Int -> Element.Color
-color c =
+            str |> String.toList |> List.map (\c -> Colored c (Element.rgb 0.4 0.5 0.0))
+
+
+ofDepth : Depth -> Element.Color
+ofDepth (Depth c) =
     let
         rgb =
             Element.rgb255
@@ -196,22 +252,24 @@ color c =
 
         _ ->
             rgb 200 100 200
-            
-leftColon : Element.Color -> Element msg
-leftColon cattr =
-    Element.el [ Element.Font.color cattr ] <| Element.text "("
 
 
-rightColon : Element.Color -> Element msg
-rightColon cattr =
-    Element.el [ Element.Font.color cattr ] <| Element.text ")"
+leftColon : Element.Color -> HighlightedChars
+leftColon =
+    Colored '('
 
 
-space : Element msg
+rightColon : Element.Color -> HighlightedChars
+rightColon =
+    Colored ')'
+
+
+space : HighlightedChars
 space =
-    Element.el [] (Element.text " ")
+    Uncolored ' '
 
-colorize : String -> List (Element msg)
+
+colorize : String -> List HighlightedChars
 colorize cispString =
     let
         result =
@@ -222,7 +280,17 @@ colorize cispString =
     in
     case result of
         Ok res ->
-            res |> makeTree |> renderTree
+            res |> renderTree
 
         Err _ ->
-            [Element.el [Element.Font.underline] (Element.text (cispString))]
+            cispString |> String.toList |> List.map (\c -> Uncolored c)
+
+
+toElem : HighlightedChars -> Element msg
+toElem c =
+    case c of
+        Colored char color ->
+            Element.el [ Element.Font.color color ] (Element.text (String.fromChar char))
+
+        Uncolored char ->
+            Element.el [] (Element.text (String.fromChar char))
