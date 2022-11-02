@@ -134,13 +134,14 @@ insertAtList idx a lst =
 
 view : (Msg -> msg) -> Model -> Element msg
 view toMsg model =
-    Element.map toMsg
-        (Cisp.colorize
-        (model.field |> arrayToString)
+    model.field
+        |> arrayToString
+        |> Cisp.colorize
         |> List.map Cisp.toElem
         |> addPlaceCursorEvent
         |> insertAtList model.cursorIndex cursor
-        |> Element.paragraph [])
+        |> Element.wrappedRow []
+        |> Element.map toMsg
 
 
 subscriptions =

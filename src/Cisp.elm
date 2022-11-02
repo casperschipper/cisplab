@@ -100,13 +100,18 @@ value : Parser CValue
 value =
     Parser.oneOf
         [ cispNumber
-        , Parser.chompWhile Char.isAlpha |> Parser.getChompedString |> Parser.map parseString
+        , Parser.succeed ()
+            |. Parser.chompIf Char.isAlpha
+            |. Parser.chompWhile Char.isAlpha -- ChompWhile is dangerous!!! 
+            |> Parser.getChompedString
+            |> Parser.map parseString
         ]
 
 
 parseSpace : Parser (List Sexpr)
 parseSpace =
     Parser.chompWhile (\c -> c == ' ' || c == '\n' || c == '\u{000D}')
+        -- zero or more
         |> Parser.getChompedString
         |> Parser.map
             (\str ->
@@ -121,13 +126,18 @@ complete =
             parseSpace
                 |> Parser.andThen
                     (\spaces ->
-                        Parser.oneOf -- OK IT is important that you first do the recursive case !! but why ??
+                        let
+                            _ =
+                                Debug.log "spaces:" spaces
+                        in
+                        Parser.oneOf
+                            -- OK IT is important that you first do the recursive case !! but why ??
                             [ Parser.succeed identity
                                 |. Parser.symbol "("
-                                |= (Parser.loop [] (helper (increase depth)) |> Parser.map (\v -> Parser.Loop (v :: expression_lst)))
+                                |= (Parser.loop [] (helper (increase depth)) |> Parser.map (\v -> Parser.Loop (v :: spaces ++ expression_lst)))
                             , Parser.symbol ")"
-                                |> Parser.map (\_ -> Parser.Done (Slist (ParOpen depth :: List.reverse (ParClose depth :: expression_lst))))
-                            , value |> Parser.map (\v -> Parser.Loop (Value v :: expression_lst))
+                                |> Parser.map (\_ -> Parser.Done (Slist (ParOpen depth :: List.reverse (ParClose depth :: spaces ++ expression_lst))))
+                            , value |> Parser.map (\v -> Parser.Loop (Value v :: spaces ++ expression_lst)) -- this is the line that blew up!
                             , Parser.end
                                 |> Parser.andThen (\_ -> Parser.problem "expecting closing parenthesis: )")
                             ]
