@@ -140,7 +140,7 @@ view toMsg model =
         |> List.map Cisp.toElem
         |> addPlaceCursorEvent
         |> insertAtList model.cursorIndex cursor
-        |> Element.wrappedRow []
+        |> Element.wrappedRow [ Element.Font.family [Element.Font.monospace] ]
         |> Element.map toMsg
 
 

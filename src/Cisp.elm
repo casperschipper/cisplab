@@ -102,7 +102,8 @@ value =
         [ cispNumber
         , Parser.succeed ()
             |. Parser.chompIf Char.isAlpha
-            |. Parser.chompWhile Char.isAlpha -- ChompWhile is dangerous!!! 
+            |. Parser.chompWhile Char.isAlpha
+            -- ChompWhile is dangerous!!!
             |> Parser.getChompedString
             |> Parser.map parseString
         ]
@@ -126,10 +127,6 @@ complete =
             parseSpace
                 |> Parser.andThen
                     (\spaces ->
-                        let
-                            _ =
-                                Debug.log "spaces:" spaces
-                        in
                         Parser.oneOf
                             -- OK IT is important that you first do the recursive case !! but why ??
                             [ Parser.succeed identity
@@ -143,10 +140,10 @@ complete =
                             ]
                     )
     in
-    -- Parser.succeed (ParClose (Depth 0))
     Parser.succeed identity
         |. Parser.symbol "("
         |= Parser.loop [] (helper (Depth 0))
+        |. Parser.end
 
 
 
