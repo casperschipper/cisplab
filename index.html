@@ -19,6 +19,9 @@
     {
       document.getElementById("elm").innerText = 'This is a headless program, meaning there is nothing to show here.\\n\\nI started the program anyway though, and you can access it as `app` in the developer console.';
     }
+
+    window.onblur = function() { app.ports.blurs.send(42) }
+
     // Add this line!
     app.ports.sendSocketCommand.subscribe(sendSocketCommand);
     var mySockets = {};

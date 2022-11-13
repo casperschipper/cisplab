@@ -24,6 +24,8 @@ port receiveSocketMsg : (JD.Value -> msg) -> Sub msg
 
 port sendSocketCommand : JE.Value -> Cmd msg
 
+port blurs : (() -> msg) -> Sub msg 
+
 
 type Model
     = Model
@@ -67,6 +69,7 @@ type Msg
     | SendCustom
     | VoiceMsg Int OneVoice.Msg
     | CispFieldMsg CispField.Msg
+    | Blur 
 
 
 input : String
@@ -248,7 +251,18 @@ update msg model =
         CispFieldMsg cmsg ->
             case model of
                 Model m ->
-                    ( Model { m | cispField = CispField.update cmsg (getCispField model) }, Cmd.none )
+                    let 
+                        (newCispField,_) = 
+                            CispField.update cmsg (getCispField model)
+                    in
+                    ( Model { m | cispField = newCispField }, Cmd.none )
+
+        Blur ->
+            case model of
+                Model m ->
+                    -- should blur all cispfields
+                    ( Model { m | cispField = CispField.blur (getCispField model)}, Cmd.none)
+
 
 
 handleAction : Int -> Maybe Action -> Cmd Msg
@@ -273,6 +287,7 @@ subscriptions _ =
     Sub.batch
         [ receiveSocketMsg <| WebSocket.receive ReceivedFrame
         , Sub.map CispFieldMsg CispField.subscriptions
+        , blurs (\() -> Blur)
         ]
 
 

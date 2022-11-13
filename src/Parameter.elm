@@ -1,4 +1,4 @@
-module Parameter exposing (..)
+module Parameter exposing (toString, Parameter(..))
 
 type Parameter
     = Pitch

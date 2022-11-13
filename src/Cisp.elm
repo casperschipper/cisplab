@@ -132,8 +132,10 @@ complete =
                             [ Parser.succeed identity
                                 |. Parser.symbol "("
                                 |= (Parser.loop [] (helper (increase depth)) |> Parser.map (\v -> Parser.Loop (v :: spaces ++ expression_lst)))
-                            , Parser.symbol ")"
-                                |> Parser.map (\_ -> Parser.Done (Slist (ParOpen depth :: List.reverse (ParClose depth :: spaces ++ expression_lst))))
+                            , Parser.succeed identity
+                                |. Parser.symbol ")"
+                                |= parseSpace
+                                |> Parser.map (\trailingSpaces -> Parser.Done (Slist (ParOpen depth :: List.reverse (trailingSpaces ++ (ParClose depth :: spaces ++ expression_lst)))))
                             , value |> Parser.map (\v -> Parser.Loop (Value v :: spaces ++ expression_lst)) -- this is the line that blew up!
                             , Parser.end
                                 |> Parser.andThen (\_ -> Parser.problem "expecting closing parenthesis: )")
@@ -143,25 +145,8 @@ complete =
     Parser.succeed identity
         |. Parser.symbol "("
         |= Parser.loop [] (helper (Depth 0))
+        |. Parser.spaces
         |. Parser.end
-
-
-
--- clist : Depth -> Parser Sexpr
--- clist depth =
---     Parser.sequence
---         { start = "("
---         , separator = " "
---         , end = ")"
---         , spaces = Parser.succeed ()
---         , item =
---             Parser.oneOf
---                 [ Parser.lazy (\_ -> clist (increase depth)) -- hmm why does this one have to come first ?
---                 , value |> Parser.map Value
---                 ]
---         , trailing = Parser.Forbidden
---         }
---         |> Parser.map Slist
 
 
 sexpr : Parser Sexpr
@@ -172,29 +157,6 @@ sexpr =
 type HighlightedChars
     = Colored Char Element.Color
     | Uncolored Char
-
-
-
-{-
-   colorTree : Tree CValue -> Tree (Colored CValue)
-   colorTree tree =
-       case tree of
-           Tree n [] ->
-               Tree n []
-
-           Tree n lst ->
-               let clr =
-                   color n
-
-                   chars =
-                        lst
-                           |> List.concatMap colorTree
-                           |> (\xs -> leftColon clr :: List.intersperse space xs ++ [ rightColon clr ])
-               in
-               chars
-
-           Node v ->
--}
 
 
 renderTree : Sexpr -> List HighlightedChars
@@ -281,9 +243,6 @@ colorize cispString =
     let
         result =
             Parser.run sexpr cispString
-
-        _ =
-            Debug.log "result:\n" result
     in
     case result of
         Ok res ->
@@ -292,12 +251,24 @@ colorize cispString =
         Err _ ->
             cispString |> String.toList |> List.map (\c -> Uncolored c)
 
+mString : String -> Maybe String
+mString cispString =
+    let
+        result =
+            Parser.run sexpr cispString
+    in
+    case result of
+        Ok _ ->
+           Just cispString
 
-toElem : HighlightedChars -> Element msg
-toElem c =
+        Err _ ->
+            Nothing
+
+toElem : List (Element.Attribute msg) -> HighlightedChars -> Element msg
+toElem attrs c =
     case c of
         Colored char color ->
-            Element.el [ Element.Font.color color ] (Element.text (String.fromChar char))
+            Element.el (Element.Font.color color :: attrs) (Element.text (String.fromChar char))
 
         Uncolored char ->
-            Element.el [] (Element.text (String.fromChar char))
+            Element.el attrs (Element.text (String.fromChar char))

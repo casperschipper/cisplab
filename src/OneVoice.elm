@@ -37,7 +37,7 @@ setParameter p m =
         str =
             m.pitch |> cispAsString
     in
-    Update Pitch str
+    Update p str
 
 
 changeParameter p s m =
