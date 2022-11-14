@@ -1,4 +1,4 @@
-port module Main exposing (Model(..), Msg(..), black, buttonStyle, display, getCisp, getCispField, getCisps, getCustom, handleAction, init, input, main, receiveSocketMsg, sendSocketCommand, setCisps, subscriptions, update, view, viewChar, white, wssend)
+port module Main exposing (Model(..), Msg(..), black, blurs, buttonStyle, display, getCisp, getCisps, getCustom, handleAction, init, input, main, receiveSocketMsg, sendSocketCommand, setCisps, subscriptions, update, view, viewChar, white, wssend)
 
 import Array exposing (Array)
 import Browser exposing (Document)
@@ -24,7 +24,8 @@ port receiveSocketMsg : (JD.Value -> msg) -> Sub msg
 
 port sendSocketCommand : JE.Value -> Cmd msg
 
-port blurs : (() -> msg) -> Sub msg 
+
+port blurs : (() -> msg) -> Sub msg
 
 
 type Model
@@ -32,7 +33,6 @@ type Model
         { cisp : CispProgram
         , custom : String
         , cisps : Array OneVoice
-        , cispField : CispField.Model
         }
 
 
@@ -56,11 +56,6 @@ setCisps cisps (Model m) =
     Model { m | cisps = cisps }
 
 
-getCispField : Model -> CispField.Model
-getCispField (Model model) =
-    model.cispField
-
-
 type Msg
     = CispString String
     | ReceivedFrame (Result JD.Error WebSocket.WebSocketMsg)
@@ -68,8 +63,7 @@ type Msg
     | SetCustom String
     | SendCustom
     | VoiceMsg Int OneVoice.Msg
-    | CispFieldMsg CispField.Msg
-    | Blur 
+    | Blur
 
 
 input : String
@@ -88,7 +82,7 @@ init _ =
                 }
                 |> wssend
     in
-    Model { cisp = Invalid "", custom = "", cisps = Array.fromList [ OneVoice.init ], cispField = CispField.init } |> update (CispString input) |> Tuple.mapSecond (\_ -> websocketCmd)
+    Model { cisp = Invalid "", custom = "", cisps = Array.fromList [ OneVoice.init ] } |> update (CispString input) |> Tuple.mapSecond (\_ -> websocketCmd)
 
 
 main : Platform.Program () Model Msg
@@ -133,7 +127,7 @@ buttonStyle =
 
 
 display : Model -> Html Msg
-display (Model { cisp, custom, cisps, cispField }) =
+display (Model { cisp, custom, cisps }) =
     let
         textInputStyle =
             [ Element.centerX, Element.width (Element.px 1000) ]
@@ -171,7 +165,6 @@ display (Model { cisp, custom, cisps, cispField }) =
                 }
             , Element.Input.button buttonStyle { onPress = Just SendCustom, label = Element.text "send custom" }
             , cispsView
-            , CispField.view CispFieldMsg cispField
             ]
         )
 
@@ -186,10 +179,10 @@ update msg model =
             in
             case result of
                 Ok _ ->
-                    ( Model { cisp = Valid str, custom = getCustom model, cisps = getCisps model, cispField = getCispField model }, Cmd.none )
+                    ( Model { cisp = Valid str, custom = getCustom model, cisps = getCisps model }, Cmd.none )
 
                 Err _ ->
-                    ( Model { cisp = Invalid str, custom = getCustom model, cisps = getCisps model, cispField = getCispField model }, Cmd.none )
+                    ( Model { cisp = Invalid str, custom = getCustom model, cisps = getCisps model }, Cmd.none )
 
         ReceivedFrame result ->
             let
@@ -248,21 +241,15 @@ update msg model =
             in
             ( setCisps updatedCisps model, cmd )
 
-        CispFieldMsg cmsg ->
-            case model of
-                Model m ->
-                    let 
-                        (newCispField,_) = 
-                            CispField.update cmsg (getCispField model)
-                    in
-                    ( Model { m | cispField = newCispField }, Cmd.none )
-
         Blur ->
             case model of
                 Model m ->
-                    -- should blur all cispfields
-                    ( Model { m | cispField = CispField.blur (getCispField model)}, Cmd.none)
-
+                    -- TODO should blur all cispfields
+                    let
+                        _ =
+                            Debug.todo "fish"
+                    in
+                    ( model, Cmd.none )
 
 
 handleAction : Int -> Maybe Action -> Cmd Msg
@@ -286,7 +273,6 @@ subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
         [ receiveSocketMsg <| WebSocket.receive ReceivedFrame
-        , Sub.map CispFieldMsg CispField.subscriptions
         , blurs (\() -> Blur)
         ]
 
@@ -294,4 +280,3 @@ subscriptions _ =
 wssend : WebSocketCmd -> Cmd msg
 wssend =
     WebSocket.send sendSocketCommand
- 

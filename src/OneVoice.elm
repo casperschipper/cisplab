@@ -1,88 +1,60 @@
 module OneVoice exposing (..)
 
-import Cisp exposing (CispProgram, cispAsString, sexpr)
+import Cisp exposing ( cispAsString, sexpr)
 import Element exposing (Element, column, fill, px, width)
 import Element.Input as Input
 import Parameter exposing (Parameter(..))
+import CispField 
 
 
 type alias OneVoice =
-    { pitch : CispProgram
-    , velo : CispProgram
-    , channel : CispProgram
-    , duration : CispProgram
+    { pitch : CispField.Model
+    , velo : CispField.Model
+    , channel : CispField.Model
+    , duration : CispField.Model
     }
 
 
 init : OneVoice
 init =
-    { pitch = Cisp.ofString "(st 60)"
-    , velo = Cisp.ofString "(st 100)"
-    , channel = Cisp.ofString "(st 1)"
-    , duration = Cisp.ofString "(st 0.1)"
+    { pitch = CispField.init "(st 60)"
+    , velo = CispField.init "(st 100)"
+    , channel = CispField.init "(st 1)"
+    , duration = CispField.init "(st 0.1)"
     }
 
 
 type Msg
-    = Change Parameter String
-    | Set Parameter
+    = Change Parameter CispField.Msg
 
 
 type Action
     = Update Parameter String
 
 
-setParameter p m =
-    let
-        str =
-            m.pitch |> cispAsString
-    in
-    Update p str
 
-
-changeParameter p s m =
-    case p of
-        Pitch ->
-            { m | pitch = Cisp.ofString s }
-
-        Velo ->
-            { m | velo = Cisp.ofString s }
-
-        Duration ->
-            { m | duration = Cisp.ofString s }
-
-        Channel ->
-            { m | channel = Cisp.ofString s }
 
 
 update : Msg -> OneVoice -> ( OneVoice, Maybe Action )
 update msg m =
     case msg of
-        Set p ->
-            ( m, Just (setParameter p m) )
+        Change p cspMsg ->
+            let 
+                (newP,mString) =
+                    CispField.update cspMsg m.pitch 
+            in
+            ({ m | pitch = newP },mString |> Maybe.map (\str -> Update p str))
 
-        Change p s ->
-            ( changeParameter p s m, Nothing )
 
 
-parView : Parameter -> CispProgram -> Element Msg
+parView : Parameter -> CispField.Model -> Element Msg
 parView p c =
-    let
-        str =
-            cispAsString c
+    let 
+        str = 
+            Parameter.toString p 
     in
-    Element.row [ width fill ]
-        [ Input.text [ width fill ]
-            { onChange = Change p
-            , text = cispAsString c
-            , label = Input.labelAbove [] (Element.text (Parameter.toString p))
-            , placeholder = Nothing
-            }
-        , Input.button [ width (px 100) ]
-            { onPress = Just (Set p)
-            , label = Element.text "set!"
-            }
-        ]
+    CispField.view (Change p) c
+    
 
 
 view : OneVoice -> Element Msg

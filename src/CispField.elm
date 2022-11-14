@@ -44,10 +44,10 @@ blur model =
     { model | pressedKeys = [] }
 
 
-init : Model
-init =
+init : String -> Model
+init initial =
     { pressedKeys = []
-    , field = Array.fromList <| String.toList <| " "
+    , field = Array.fromList <| String.toList <|  initial
     , cursorIndex = 0
     }
 
@@ -208,8 +208,12 @@ update msg model =
             ({ model | cursorIndex = idx }, Nothing)
 
         Pressed ->
-            (model, model.field |> arrayToString |> Cisp.mString)
+            (model, validProgram model)
 
+
+validProgram : Model -> Maybe String
+validProgram model =
+    model.field |> arrayToString |> Cisp.mString
 
 cursor : Element.Element msg
 cursor =
