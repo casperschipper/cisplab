@@ -213,6 +213,20 @@ wssend =
     WebSocket.send sendSocketCommand
 
 
+mkAction : Int -> Parameter -> Maybe CispField.OutMsg -> Maybe Action
+mkAction voiceIndex parameter outMsg =
+    outMsg
+        |> Maybe.map
+            (\out ->
+                case out of
+                    CispField.Highlight ->
+                        HighLight voiceIndex parameter
+
+                    CispField.EvalString str ->
+                        Update voiceIndex parameter str
+            )
+
+
 updatePar : Int -> Parameter -> CispField.Msg -> OneVoice -> ( OneVoice, Maybe Action )
 updatePar voiceIndex parameter msg voice =
     case parameter of
@@ -220,77 +234,29 @@ updatePar voiceIndex parameter msg voice =
             let
                 ( newPar, outMsg ) =
                     CispField.update msg voice.pitch
-
-                mAction =
-                    outMsg
-                        |> Maybe.map
-                            (\out ->
-                                case out of
-                                    CispField.Highlight ->
-                                        HighLight voiceIndex parameter
-
-                                    CispField.EvalString str ->
-                                        Update voiceIndex parameter str
-                            )
             in
-            ( { voice | pitch = newPar }, mAction )
+            ( { voice | pitch = newPar }, mkAction voiceIndex parameter outMsg )
 
         Velo ->
             let
                 ( newPar, outMsg ) =
                     CispField.update msg voice.velo
-
-                mAction =
-                    outMsg
-                        |> Maybe.map
-                            (\out ->
-                                case out of
-                                    CispField.Highlight ->
-                                        HighLight voiceIndex parameter
-
-                                    CispField.EvalString str ->
-                                        Update voiceIndex parameter str
-                            )
             in
-            ( { voice | velo = newPar }, mAction )
+            ( { voice | velo = newPar }, mkAction voiceIndex parameter outMsg )
 
         Duration ->
             let
                 ( newPar, outMsg ) =
                     CispField.update msg voice.duration
-
-                mAction =
-                    outMsg
-                        |> Maybe.map
-                            (\out ->
-                                case out of
-                                    CispField.Highlight ->
-                                        HighLight voiceIndex parameter
-
-                                    CispField.EvalString str ->
-                                        Update voiceIndex parameter str
-                            )
             in
-            ( { voice | duration = newPar }, mAction )
+            ( { voice | duration = newPar }, mkAction voiceIndex parameter outMsg )
 
         Channel ->
             let
                 ( newPar, outMsg ) =
                     CispField.update msg voice.channel
-
-                mAction =
-                    outMsg
-                        |> Maybe.map
-                            (\out ->
-                                case out of
-                                    CispField.Highlight ->
-                                        HighLight voiceIndex parameter
-
-                                    CispField.EvalString str ->
-                                        Update voiceIndex parameter str
-                            )
             in
-            ( { voice | channel = newPar }, mAction )
+            ( { voice | channel = newPar }, mkAction voiceIndex parameter outMsg )
 
 
 type alias OneVoice =
