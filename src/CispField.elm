@@ -1,17 +1,17 @@
 module CispField exposing
     ( Model
     , Msg(..)
+    , OutMsg(..)
     , addPlaceCursorEvent
     , allowedSymbols
     , arrayToString
     , blur
-    , cursor
     , filter
     , init
     , insertAtList
-    , subscriptions
     , update
     , view
+    , createKeyboardMsg
     )
 
 import Array exposing (Array)
@@ -24,6 +24,7 @@ import Element.Font
 import Element.Input
 import Keyboard exposing (Key(..), KeyChange(..))
 import Keyboard.Arrows as Arrows
+import Parameter exposing (Parameter(..))
 
 
 type alias Model =
@@ -31,12 +32,6 @@ type alias Model =
     , field : Array Char
     , cursorIndex : Int
     }
-
-
-type Msg
-    = KeyboardMessage Keyboard.Msg
-    | ClickedElement Int
-    | Pressed
 
 
 blur : Model -> Model
@@ -47,9 +42,14 @@ blur model =
 init : String -> Model
 init initial =
     { pressedKeys = []
-    , field = Array.fromList <| String.toList <|  initial
+    , field = Array.fromList <| String.toList <| initial
     , cursorIndex = 0
     }
+
+
+arrayAsString : Array Char -> String
+arrayAsString arr =
+    arr |> Array.toList |> String.fromList
 
 
 allowedSymbols : Char -> Bool
@@ -145,10 +145,24 @@ addTrailingSpace array =
             Array.push ' ' array
 
 
-update : Msg -> Model -> (Model, Maybe String)
+type Msg
+    = KeyboardMsg Keyboard.Msg
+    | JumpToLocation Int
+    | Eval
+
+
+type OutMsg
+    = Highlight
+    | EvalString String
+
+createKeyboardMsg : Keyboard.Msg -> Msg 
+createKeyboardMsg kbMsg =
+    KeyboardMsg kbMsg 
+
+update : Msg -> Model -> ( Model, Maybe OutMsg )
 update msg model =
     case msg of
-        KeyboardMessage keyMsg ->
+        KeyboardMsg keyMsg ->
             let
                 withTrail =
                     { model | field = addTrailingSpace model.field }
@@ -161,59 +175,63 @@ update msg model =
 
                 controlPressed =
                     List.member Keyboard.Control pressedKeys
-            in
-            case ( controlPressed, keyChange ) of
-                ( True, Just (KeyUp (Character "e")) ) ->
-                    (gotoEndOfLine newModel , Nothing)
 
-                ( True, Just (KeyUp (Character "a")) ) ->
-                    (gotoStartOfLine newModel, Nothing)
+                newModel2 =
+                    case ( controlPressed, keyChange ) of
+                        ( True, Just (KeyUp (Character "e")) ) ->
+                            gotoEndOfLine newModel
 
-                ( True, Just (KeyUp (Character "d")) ) ->
-                    (deleteCurrentChar newModel, Nothing)
+                        ( True, Just (KeyUp (Character "a")) ) ->
+                            gotoStartOfLine newModel
 
-                ( True, _ ) ->
-                    (newModel, Nothing)
+                        ( True, Just (KeyUp (Character "d")) ) ->
+                            deleteCurrentChar newModel
 
-                ( False, Just (KeyDown Backspace) ) ->
-                    (deleteChar newModel, Nothing)
+                        ( True, _ ) ->
+                            newModel
 
-                ( False, Just (KeyDown (Character any)) ) ->
-                    case filter any of
-                        Just c ->
-                            ({ newModel
-                                | field = insertAt newModel.cursorIndex c newModel.field
+                        ( False, Just (KeyDown Backspace) ) ->
+                            deleteChar newModel
+
+                        ( False, Just (KeyDown (Character any)) ) ->
+                            case filter any of
+                                Just c ->
+                                    { newModel
+                                        | field = insertAt newModel.cursorIndex c newModel.field
+                                        , cursorIndex = newModel.cursorIndex + 1
+                                    }
+
+                                Nothing ->
+                                    newModel
+
+                        ( False, Just (KeyDown Keyboard.Spacebar) ) ->
+                            { newModel
+                                | field = insertAt newModel.cursorIndex ' ' newModel.field
                                 , cursorIndex = newModel.cursorIndex + 1
-                            }, Nothing)
+                            }
 
-                        Nothing ->
-                            (newModel, Nothing)
+                        ( False, Just (KeyUp other) ) ->
+                            newModel
 
-                ( False, Just (KeyDown Keyboard.Spacebar) ) ->
-                    ({ newModel
-                        | field = insertAt newModel.cursorIndex ' ' newModel.field
-                        , cursorIndex = newModel.cursorIndex + 1
-                    }, Nothing)
+                        ( False, Just (KeyDown kd) ) ->
+                            newModel
 
-                ( False, Just (KeyUp other) ) ->
-                    (newModel, Nothing)
+                        ( False, Nothing ) ->
+                            newModel
+            in
+            ( newModel2, Nothing )
 
-                ( False, Just (KeyDown kd) ) ->
-                    (newModel,Nothing)
+        JumpToLocation location ->
+            ( { model | cursorIndex = location }, Just Highlight )
 
-                ( False, Nothing ) ->
-                    (newModel, Nothing)
-
-        ClickedElement idx ->
-            ({ model | cursorIndex = idx }, Nothing)
-
-        Pressed ->
-            (model, validProgram model)
+        Eval ->
+            ( model, Just (EvalString <| arrayToString model.field) )
 
 
 validProgram : Model -> Maybe String
 validProgram model =
     model.field |> arrayToString |> Cisp.mString
+
 
 cursor : Element.Element msg
 cursor =
@@ -225,11 +243,11 @@ arrayToString arr =
     arr |> Array.toList |> String.fromList
 
 
-addPlaceCursorEvent : List (Element Msg) -> List (Element Msg)
-addPlaceCursorEvent arr =
+addPlaceCursorEvent : (Int -> Msg) -> List (Element Msg) -> List (Element Msg)
+addPlaceCursorEvent clickMsg arr =
     let
         f idx elm =
-            Element.el [ Element.Events.onClick (ClickedElement idx) ] elm
+            Element.el [ Element.Events.onClick (clickMsg idx) ] elm
     in
     List.indexedMap f arr
 
@@ -248,8 +266,8 @@ markCursor idx n char =
         Cisp.toElem [] char
 
 
-view : (Msg -> msg) -> Model -> Element msg
-view toMsg model =
+view : Model -> Element Msg
+view model =
     let
         field =
             model.field
@@ -257,20 +275,13 @@ view toMsg model =
                 |> Cisp.colorize
                 -- should result in zip with placed highlight of current cursot
                 |> List.indexedMap (markCursor model.cursorIndex)
-                |> addPlaceCursorEvent
-                |> Element.wrappedRow [ Element.width <| Element.fillPortion 7 ,Element.Font.family [ Element.Font.monospace ] ]
+                |> addPlaceCursorEvent (\idx -> JumpToLocation idx)
+                |> Element.wrappedRow [ Element.width <| Element.fillPortion 7, Element.Font.family [ Element.Font.monospace ] ]
     in
-    Element.map toMsg
-        (Element.row [ Element.width Element.fill ]
-            [ field
-            , Element.Input.button [Element.width <| Element.fillPortion 1 ]
-                { onPress = Just Pressed
-                , label = Element.text "eval"
-                }
-            ]
-        )
-
-
-subscriptions : Sub Msg
-subscriptions =
-    Sub.map KeyboardMessage Keyboard.subscriptions
+    Element.row [ Element.width Element.fill ]
+        [ field
+        , Element.Input.button [ Element.width <| Element.fillPortion 1 ]
+            { onPress = Just Eval
+            , label = Element.text "eval"
+            }
+        ]

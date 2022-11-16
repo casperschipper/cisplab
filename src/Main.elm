@@ -1,20 +1,20 @@
-port module Main exposing (Model(..), Msg(..), black, blurs, buttonStyle, display, getCisp, getCisps, getCustom, handleAction, init, input, main, receiveSocketMsg, sendSocketCommand, setCisps, subscriptions, update, view, viewChar, white, wssend)
+port module Main exposing (Action(..), Model, Msg(..), OneVoice, SelectedCisp(..), black, blurs, buttonStyle, display, getCispField, handleAction, init, initVoice, input, main, parView, receiveSocketMsg, sendSocketCommand, subscriptions, update, updatePar, view, viewChar, viewVoice, white, wssend)
 
 import Array exposing (Array)
 import Browser exposing (Document)
 import Cisp exposing (..)
 import CispField
-import Element exposing (Element)
+import Element exposing (Element, column, fill, px, width)
 import Element.Background
 import Element.Border
 import Element.Font
-import Element.Input
+import Element.Input as Input
 import Html exposing (Html)
 import Html.Events exposing (custom)
 import Json.Decode as JD
 import Json.Encode as JE
-import OneVoice exposing (Action(..), OneVoice)
-import Parameter exposing (Parameter)
+import Keyboard
+import Parameter exposing (Parameter(..))
 import Parser exposing (Parser)
 import WebSocket exposing (WebSocketCmd(..))
 
@@ -28,32 +28,16 @@ port sendSocketCommand : JE.Value -> Cmd msg
 port blurs : (() -> msg) -> Sub msg
 
 
-type Model
-    = Model
-        { cisp : CispProgram
-        , custom : String
-        , cisps : Array OneVoice
-        }
+type SelectedCisp
+    = SelectedCisp Int Parameter
 
 
-getCustom : Model -> String
-getCustom (Model model) =
-    model.custom
-
-
-getCisp : Model -> CispProgram
-getCisp (Model model) =
-    model.cisp
-
-
-getCisps : Model -> Array OneVoice
-getCisps (Model m) =
-    m.cisps
-
-
-setCisps : Array OneVoice -> Model -> Model
-setCisps cisps (Model m) =
-    Model { m | cisps = cisps }
+type alias Model =
+    { cisp : CispProgram
+    , custom : String
+    , cisps : Array OneVoice
+    , selected : SelectedCisp
+    }
 
 
 type Msg
@@ -62,8 +46,9 @@ type Msg
     | SendMessage String
     | SetCustom String
     | SendCustom
-    | VoiceMsg Int OneVoice.Msg
     | Blur
+    | KeyboardMsg Keyboard.Msg
+    | CispFieldMsg Int Parameter CispField.Msg
 
 
 input : String
@@ -82,7 +67,13 @@ init _ =
                 }
                 |> wssend
     in
-    Model { cisp = Invalid "", custom = "", cisps = Array.fromList [ OneVoice.init ] } |> update (CispString input) |> Tuple.mapSecond (\_ -> websocketCmd)
+    { cisp = Invalid ""
+    , custom = ""
+    , cisps = Array.fromList [ initVoice ]
+    , selected = SelectedCisp 0 Pitch
+    }
+        |> update (CispString input)
+        |> Tuple.mapSecond (\_ -> websocketCmd)
 
 
 main : Platform.Program () Model Msg
@@ -117,6 +108,7 @@ white =
     Element.rgb 1 1 1
 
 
+buttonStyle : List (Element.Attribute msg)
 buttonStyle =
     [ Element.centerX
     , Element.Border.solid
@@ -127,7 +119,7 @@ buttonStyle =
 
 
 display : Model -> Html Msg
-display (Model { cisp, custom, cisps }) =
+display { cisp, custom, cisps } =
     let
         textInputStyle =
             [ Element.centerX, Element.width (Element.px 1000) ]
@@ -135,36 +127,35 @@ display (Model { cisp, custom, cisps }) =
         cispsView =
             Element.column [ Element.width Element.fill ]
                 (cisps
-                    |> Array.indexedMap (\idx voice -> Element.map (\v -> VoiceMsg idx v) (OneVoice.view voice))
+                    |> Array.indexedMap (\idx voice -> viewVoice idx voice)
                     |> Array.toList
                 )
     in
     Element.layout
         [ Element.width Element.fill, Element.Background.color black ]
         (Element.column [ Element.centerX, Element.spacing 25 ]
-            [ Element.Input.text textInputStyle
-                { onChange = CispString
-                , text = cispAsString cisp
-                , placeholder = Nothing
-                , label = Element.Input.labelAbove [ Element.Font.color white ] <| Element.text "CISP:"
-                }
-            , case cisp of
-                Valid csp ->
-                    Element.Input.button buttonStyle
-                        { onPress = Just (SendMessage csp)
-                        , label = Element.text "Send to CISP"
-                        }
-
-                Invalid _ ->
-                    Element.text "not valid"
-            , Element.Input.text textInputStyle
-                { onChange = SetCustom
-                , text = custom
-                , placeholder = Nothing
-                , label = Element.Input.labelAbove [] <| Element.text "custom ws mesage"
-                }
-            , Element.Input.button buttonStyle { onPress = Just SendCustom, label = Element.text "send custom" }
-            , cispsView
+            [ -- [ Element.Input.text textInputStyle
+              --     { onChange = CispString
+              --     , text = cispAsString cisp
+              --     , placeholder = Nothing
+              --     , label = Element.Input.labelAbove [ Element.Font.color white ] <| Element.text "CISP:"
+              --     }
+              -- , case cisp of
+              --     Valid csp ->
+              --         Element.Input.button buttonStyle
+              --             { onPress = Just (SendMessage csp)
+              --             , label = Element.text "Send to CISP"
+              --             }
+              --     Invalid _ ->
+              --         Element.text "not valid"
+              -- , Element.Input.text textInputStyle
+              --     { onChange = SetCustom
+              --     , text = custom
+              --     , placeholder = Nothing
+              --     , label = Element.Input.labelAbove [] <| Element.text "custom ws mesage"
+              --     }
+              -- , Element.Input.button buttonStyle { onPress = Just SendCustom, label = Element.text "send custom" }
+              cispsView
             ]
         )
 
@@ -179,10 +170,10 @@ update msg model =
             in
             case result of
                 Ok _ ->
-                    ( Model { cisp = Valid str, custom = getCustom model, cisps = getCisps model }, Cmd.none )
+                    ( { model | cisp = Valid str, custom = model.custom, cisps = model.cisps }, Cmd.none )
 
                 Err _ ->
-                    ( Model { cisp = Invalid str, custom = getCustom model, cisps = getCisps model }, Cmd.none )
+                    ( { model | cisp = Invalid str, custom = model.custom, cisps = model.cisps }, Cmd.none )
 
         ReceivedFrame result ->
             let
@@ -210,7 +201,7 @@ update msg model =
             ( model, Cmd.none )
 
         SendMessage _ ->
-            case getCisp model of
+            case model.cisp of
                 Valid str ->
                     ( model, WebSocket.Send { name = "cisp", content = "/1/pitch/ " ++ str } |> wssend )
 
@@ -218,55 +209,63 @@ update msg model =
                     ( model, Cmd.none )
 
         SetCustom str ->
-            case model of
-                Model m ->
-                    ( Model { m | custom = str }, Cmd.none )
+            ( { model | custom = str }, Cmd.none )
 
         SendCustom ->
-            ( model, WebSocket.Send { name = "cisp", content = getCustom model } |> wssend )
+            ( model, WebSocket.Send { name = "cisp", content = model.custom } |> wssend )
 
-        VoiceMsg idx vmsg ->
-            let
-                mVoiceAction =
-                    Array.get idx (getCisps model)
-                        |> Maybe.map (OneVoice.update vmsg)
-
-                ( updatedCisps, cmd ) =
-                    case mVoiceAction of
-                        Just ( v, act ) ->
-                            ( Array.set idx v (getCisps model), handleAction idx act )
-
-                        Nothing ->
-                            ( getCisps model, Cmd.none )
-            in
-            ( setCisps updatedCisps model, cmd )
-
+        -- Send messages to websocket, a Msg that is triggered when hitting "eval"
         Blur ->
-            case model of
-                Model m ->
-                    -- TODO should blur all cispfields
-                    let
-                        _ =
-                            Debug.todo "fish"
-                    in
+            -- TODO should blur all cispfields
+            let
+                _ =
+                    Debug.todo "fish"
+            in
+            ( model, Cmd.none )
+
+        KeyboardMsg kmsg ->
+            -- map to current voice
+            let
+                cispFieldMsg = 
+                    case model.selected of
+                        SelectedCisp idx parameter ->
+                            CispFieldMsg idx parameter (CispField.createKeyboardMsg kmsg)
+            in
+            update cispFieldMsg model
+
+        CispFieldMsg idx parameter fieldMsg ->
+            let
+                mvoice =
+                    Array.get idx model.cisps
+            in
+            case mvoice of
+                Just voice ->
+                    case updatePar idx parameter fieldMsg voice of
+                        ( newVoice, maction ) ->
+                            {model | cisps = Array.set idx newVoice model.cisps} |> handleAction maction
+
+                Nothing ->
                     ( model, Cmd.none )
 
 
-handleAction : Int -> Maybe Action -> Cmd Msg
-handleAction n action =
+handleAction : Maybe Action -> Model -> ( Model, Cmd Msg )
+handleAction action model =
     case action of
         Nothing ->
-            Cmd.none
+            ( model, Cmd.none )
 
-        Just (Update par str) ->
+        Just (Update idx par str) ->
             let
-                istr =
-                    String.fromInt n
+                idxstr =
+                    String.fromInt idx
 
                 address =
-                    String.join "/" [ istr, Parameter.toString par ]
+                    String.join "/" [ idxstr, Parameter.toString par ]
             in
-            WebSocket.Send { name = "cisp", content = "/" ++ address ++ " " ++ str } |> wssend
+            ( model, WebSocket.Send { name = "cisp", content = "/" ++ address ++ " " ++ str } |> wssend )
+
+        Just (HighLight idx param) ->
+            ( { model | selected = SelectedCisp idx param }, Cmd.none )
 
 
 subscriptions : Model -> Sub Msg
@@ -274,9 +273,151 @@ subscriptions _ =
     Sub.batch
         [ receiveSocketMsg <| WebSocket.receive ReceivedFrame
         , blurs (\() -> Blur)
+        , Sub.map KeyboardMsg Keyboard.subscriptions
         ]
 
 
 wssend : WebSocketCmd -> Cmd msg
 wssend =
     WebSocket.send sendSocketCommand
+
+
+getCispField : Int -> Parameter -> Array OneVoice -> Maybe CispField.Model
+getCispField idx par array =
+    let
+        getPar p voice =
+            case p of
+                Pitch ->
+                    voice.pitch
+
+                Velo ->
+                    voice.velo
+
+                Duration ->
+                    voice.duration
+
+                Channel ->
+                    voice.channel
+    in
+    Array.get idx array |> Maybe.map (getPar par)
+
+
+updatePar : Int -> Parameter -> CispField.Msg -> OneVoice -> ( OneVoice, Maybe Action )
+updatePar voiceIndex parameter msg voice =
+    case parameter of
+        Pitch ->
+            let
+                ( newPar, outMsg ) =
+                    CispField.update msg voice.pitch
+
+                mAction =
+                    outMsg
+                        |> Maybe.map
+                            (\out ->
+                                case out of
+                                    CispField.Highlight ->
+                                        HighLight voiceIndex parameter
+
+                                    CispField.EvalString str ->
+                                        Update voiceIndex parameter str
+                            )
+            in
+            ( { voice | pitch = newPar }, mAction )
+
+        Velo ->
+            let
+                ( newPar, outMsg ) =
+                    CispField.update msg voice.velo
+
+                mAction =
+                    outMsg
+                        |> Maybe.map
+                            (\out ->
+                                case out of
+                                    CispField.Highlight ->
+                                        HighLight voiceIndex parameter
+
+                                    CispField.EvalString str ->
+                                        Update voiceIndex parameter str
+                            )
+            in
+            ( { voice | velo = newPar }, mAction )
+
+        Duration ->
+            let
+                ( newPar, outMsg ) =
+                    CispField.update msg voice.duration
+
+                mAction =
+                    outMsg
+                        |> Maybe.map
+                            (\out ->
+                                case out of
+                                    CispField.Highlight ->
+                                        HighLight voiceIndex parameter
+
+                                    CispField.EvalString str ->
+                                        Update voiceIndex parameter str
+                            )
+            in
+            ( { voice | duration = newPar }, mAction )
+
+        Channel ->
+            let
+                ( newPar, outMsg ) =
+                    CispField.update msg voice.duration
+
+                mAction =
+                    outMsg
+                        |> Maybe.map
+                            (\out ->
+                                case out of
+                                    CispField.Highlight ->
+                                        HighLight voiceIndex parameter
+
+                                    CispField.EvalString str ->
+                                        Update voiceIndex parameter str
+                            )
+            in
+            ( { voice | duration = newPar }, mAction )
+
+
+type alias OneVoice =
+    { pitch : CispField.Model
+    , velo : CispField.Model
+    , channel : CispField.Model
+    , duration : CispField.Model
+    }
+
+
+initVoice : OneVoice
+initVoice =
+    { pitch = CispField.init "(st 60)"
+    , velo = CispField.init "(st 100)"
+    , channel = CispField.init "(st 1)"
+    , duration = CispField.init "(st 0.1)"
+    }
+
+
+type Action
+    = Update Int Parameter String
+    | HighLight Int Parameter
+
+
+parView : Int -> Parameter -> CispField.Model -> Element Msg
+parView voiceNumber p cispField =
+    let
+        str =
+            Parameter.toString p
+    in
+    Element.map (CispFieldMsg voiceNumber p) (CispField.view cispField)
+
+
+viewVoice : Int -> OneVoice -> Element Msg
+viewVoice idx voice =
+    column [ width fill ]
+        [ parView idx Pitch voice.pitch
+        , parView idx Velo voice.velo
+        , parView idx Duration voice.duration
+        , parView idx Channel voice.channel
+        ]
