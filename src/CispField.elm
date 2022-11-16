@@ -16,6 +16,7 @@ import Element.Background
 import Element.Events
 import Element.Font
 import Element.Input
+import Html exposing (input)
 import Keyboard exposing (Key(..), KeyChange(..))
 
 
@@ -226,8 +227,8 @@ addPlaceCursorEvent clickMsg arr =
     List.indexedMap f arr
 
 
-markCursor : Int -> Int -> Cisp.HighlightedChars -> Element msg
-markCursor idx n char =
+markCursorAt : Int -> Int -> Cisp.HighlightedChars -> Element msg
+markCursorAt idx n char =
     if n == idx then
         Cisp.toElem [ Element.Background.color (rgb 0.3 0.3 0.3) ] char
 
@@ -235,15 +236,33 @@ markCursor idx n char =
         Cisp.toElem [] char
 
 
-view : Model -> Element Msg
-view model =
+markCursor : Bool -> Int -> List Cisp.HighlightedChars -> List (Element msg)
+markCursor active n array =
+    if active then
+        List.indexedMap (markCursorAt n) array
+
+    else
+        List.map (\char -> Cisp.toElem [] char) array
+
+
+bypass : Bool -> (a -> a) -> a -> a
+bypass shouldBypass f input =
+    if shouldBypass then
+        f input
+
+    else
+        input
+
+
+view : Bool -> Model -> Element Msg
+view isActive model =
     let
         field =
             model.field
                 |> arrayToString
                 |> Cisp.colorize
                 -- should result in zip with placed highlight of current cursot
-                |> List.indexedMap (markCursor model.cursorIndex)
+                |> (markCursor isActive model.cursorIndex)
                 |> addPlaceCursorEvent (\idx -> JumpToLocation idx)
                 |> Element.wrappedRow [ Element.width <| Element.fillPortion 7, Element.Font.family [ Element.Font.monospace ] ]
     in

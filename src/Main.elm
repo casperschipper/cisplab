@@ -28,6 +28,11 @@ type SelectedCisp
     = SelectedCisp Int Parameter
 
 
+isActive : Int -> Parameter -> SelectedCisp -> Bool
+isActive voice par (SelectedCisp i p) =
+    (voice == i) && (par == p)
+
+
 type alias Model =
     { cisp : CispProgram
     , custom : String
@@ -91,40 +96,19 @@ black =
 
 
 display : Model -> Html Msg
-display { cisp, custom, cisps } =
+display model  =
     let
         cispsView =
             Element.column [ Element.width Element.fill ]
-                (cisps
-                    |> Array.indexedMap (\idx voice -> viewVoice idx voice)
+                (model.cisps
+                    |> Array.indexedMap (\idx voice -> viewVoice idx voice model.selected)
                     |> Array.toList
                 )
     in
     Element.layout
         [ Element.width Element.fill, Element.Background.color black ]
         (Element.column [ Element.centerX, Element.spacing 25 ]
-            [ -- [ Element.Input.text textInputStyle
-              --     { onChange = CispString
-              --     , text = cispAsString cisp
-              --     , placeholder = Nothing
-              --     , label = Element.Input.labelAbove [ Element.Font.color white ] <| Element.text "CISP:"
-              --     }
-              -- , case cisp of
-              --     Valid csp ->
-              --         Element.Input.button buttonStyle
-              --             { onPress = Just (SendMessage csp)
-              --             , label = Element.text "Send to CISP"
-              --             }
-              --     Invalid _ ->
-              --         Element.text "not valid"
-              -- , Element.Input.text textInputStyle
-              --     { onChange = SetCustom
-              --     , text = custom
-              --     , placeholder = Nothing
-              --     , label = Element.Input.labelAbove [] <| Element.text "custom ws mesage"
-              --     }
-              -- , Element.Input.button buttonStyle { onPress = Just SendCustom, label = Element.text "send custom" }
-              cispsView
+            [ cispsView
             ]
         )
 
@@ -281,16 +265,16 @@ type Action
     | HighLight Int Parameter
 
 
-parView : Int -> Parameter -> CispField.Model -> Element Msg
-parView voiceNumber p cispField =
-    Element.map (CispFieldMsg voiceNumber p) (CispField.view cispField)
+parView : Int -> Parameter -> SelectedCisp -> CispField.Model -> Element Msg
+parView voiceNumber p selectedCisp cispField =
+    Element.map (CispFieldMsg voiceNumber p) (CispField.view (isActive voiceNumber p selectedCisp) cispField)
 
 
-viewVoice : Int -> OneVoice -> Element Msg
-viewVoice idx voice =
-    column [ width fill ]
-        [ parView idx Pitch voice.pitch
-        , parView idx Velo voice.velo
-        , parView idx Duration voice.duration
-        , parView idx Channel voice.channel
+viewVoice : Int -> OneVoice -> SelectedCisp -> Element Msg
+viewVoice idx voice selectedCisp =
+    column [ width (Element.px 1024), Element.spacingXY 100 50 ]
+        [ parView idx Pitch selectedCisp voice.pitch
+        , parView idx Velo selectedCisp  voice.velo
+        , parView idx Duration selectedCisp voice.duration
+        , parView idx Channel selectedCisp voice.channel
         ]
