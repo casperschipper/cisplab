@@ -1,22 +1,18 @@
-port module Main exposing (Action(..), Model, Msg(..), OneVoice, SelectedCisp(..), black, blurs, buttonStyle, display, getCispField, handleAction, init, initVoice, input, main, parView, receiveSocketMsg, sendSocketCommand, subscriptions, update, updatePar, view, viewChar, viewVoice, white, wssend)
+port module Main exposing (Action(..), Model, Msg(..), OneVoice, SelectedCisp(..), main)
 
 import Array exposing (Array)
 import Browser exposing (Document)
 import Cisp exposing (..)
 import CispField
-import Element exposing (Element, column, fill, px, width)
+import Element exposing (Element, column, fill, width)
 import Element.Background
-import Element.Border
-import Element.Font
-import Element.Input as Input
 import Html exposing (Html)
-import Html.Events exposing (custom)
 import Json.Decode as JD
 import Json.Encode as JE
 import Keyboard
 import Parameter exposing (Parameter(..))
-import Parser exposing (Parser)
-import WebSocket exposing (WebSocketCmd(..))
+import Parser
+import WebSocket exposing (WebSocketCmd)
 
 
 port receiveSocketMsg : (JD.Value -> msg) -> Sub msg
@@ -43,9 +39,6 @@ type alias Model =
 type Msg
     = CispString String
     | ReceivedFrame (Result JD.Error WebSocket.WebSocketMsg)
-    | SendMessage String
-    | SetCustom String
-    | SendCustom
     | Blur
     | KeyboardMsg Keyboard.Msg
     | CispFieldMsg Int Parameter CispField.Msg
@@ -58,22 +51,21 @@ input =
 
 init : flags -> ( Model, Cmd Msg )
 init _ =
-    let
-        websocketCmd =
-            WebSocket.Connect
-                { name = "cisp"
-                , address = "ws://127.0.0.1:3000"
-                , protocol = "json"
-                }
-                |> wssend
-    in
     { cisp = Invalid ""
     , custom = ""
     , cisps = Array.fromList [ initVoice ]
     , selected = SelectedCisp 0 Pitch
     }
         |> update (CispString input)
-        |> Tuple.mapSecond (\_ -> websocketCmd)
+        |> Tuple.mapSecond
+            (\_ ->
+                WebSocket.Connect
+                    { name = "cisp"
+                    , address = "ws://127.0.0.1:3000"
+                    , protocol = "json"
+                    }
+                    |> wssend
+            )
 
 
 main : Platform.Program () Model Msg
@@ -84,11 +76,6 @@ main =
         , update = update
         , subscriptions = subscriptions
         }
-
-
-viewChar : Char -> Html Msg
-viewChar c =
-    Html.span [] [ Html.text (String.fromChar c) ]
 
 
 view : Model -> Document Msg
@@ -103,27 +90,9 @@ black =
     Element.rgb 1.0 1.0 1.0
 
 
-white : Element.Color
-white =
-    Element.rgb 1 1 1
-
-
-buttonStyle : List (Element.Attribute msg)
-buttonStyle =
-    [ Element.centerX
-    , Element.Border.solid
-    , Element.Border.width 1
-    , Element.Border.rounded 5
-    , Element.padding 10
-    ]
-
-
 display : Model -> Html Msg
 display { cisp, custom, cisps } =
     let
-        textInputStyle =
-            [ Element.centerX, Element.width (Element.px 1000) ]
-
         cispsView =
             Element.column [ Element.width Element.fill ]
                 (cisps
@@ -170,63 +139,23 @@ update msg model =
             in
             case result of
                 Ok _ ->
-                    ( { model | cisp = Valid str, custom = model.custom, cisps = model.cisps }, Cmd.none )
+                    ( { model | cisp = Valid str }, Cmd.none )
 
                 Err _ ->
-                    ( { model | cisp = Invalid str, custom = model.custom, cisps = model.cisps }, Cmd.none )
+                    ( { model | cisp = Invalid str }, Cmd.none )
 
-        ReceivedFrame result ->
-            let
-                _ =
-                    case result of
-                        Err err ->
-                            JD.errorToString err |> Debug.log "err"
-
-                        Ok websockMsg ->
-                            case websockMsg of
-                                WebSocket.Error err ->
-                                    let
-                                        _ =
-                                            Debug.log "error,string" err
-                                    in
-                                    ""
-
-                                WebSocket.Data de ->
-                                    let
-                                        _ =
-                                            Debug.log "success!" de
-                                    in
-                                    ""
-            in
+        ReceivedFrame _ ->
             ( model, Cmd.none )
-
-        SendMessage _ ->
-            case model.cisp of
-                Valid str ->
-                    ( model, WebSocket.Send { name = "cisp", content = "/1/pitch/ " ++ str } |> wssend )
-
-                Invalid _ ->
-                    ( model, Cmd.none )
-
-        SetCustom str ->
-            ( { model | custom = str }, Cmd.none )
-
-        SendCustom ->
-            ( model, WebSocket.Send { name = "cisp", content = model.custom } |> wssend )
 
         -- Send messages to websocket, a Msg that is triggered when hitting "eval"
         Blur ->
             -- TODO should blur all cispfields
-            let
-                _ =
-                    Debug.todo "fish"
-            in
             ( model, Cmd.none )
 
         KeyboardMsg kmsg ->
             -- map to current voice
             let
-                cispFieldMsg = 
+                cispFieldMsg =
                     case model.selected of
                         SelectedCisp idx parameter ->
                             CispFieldMsg idx parameter (CispField.createKeyboardMsg kmsg)
@@ -240,9 +169,11 @@ update msg model =
             in
             case mvoice of
                 Just voice ->
-                    case updatePar idx parameter fieldMsg voice of
-                        ( newVoice, maction ) ->
-                            {model | cisps = Array.set idx newVoice model.cisps} |> handleAction maction
+                    let
+                        ( newVoice, maction ) =
+                            updatePar idx parameter fieldMsg voice
+                    in
+                    { model | cisps = Array.set idx newVoice model.cisps } |> handleAction maction
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -280,26 +211,6 @@ subscriptions _ =
 wssend : WebSocketCmd -> Cmd msg
 wssend =
     WebSocket.send sendSocketCommand
-
-
-getCispField : Int -> Parameter -> Array OneVoice -> Maybe CispField.Model
-getCispField idx par array =
-    let
-        getPar p voice =
-            case p of
-                Pitch ->
-                    voice.pitch
-
-                Velo ->
-                    voice.velo
-
-                Duration ->
-                    voice.duration
-
-                Channel ->
-                    voice.channel
-    in
-    Array.get idx array |> Maybe.map (getPar par)
 
 
 updatePar : Int -> Parameter -> CispField.Msg -> OneVoice -> ( OneVoice, Maybe Action )
@@ -365,7 +276,7 @@ updatePar voiceIndex parameter msg voice =
         Channel ->
             let
                 ( newPar, outMsg ) =
-                    CispField.update msg voice.duration
+                    CispField.update msg voice.channel
 
                 mAction =
                     outMsg
@@ -379,7 +290,7 @@ updatePar voiceIndex parameter msg voice =
                                         Update voiceIndex parameter str
                             )
             in
-            ( { voice | duration = newPar }, mAction )
+            ( { voice | channel = newPar }, mAction )
 
 
 type alias OneVoice =
@@ -406,10 +317,6 @@ type Action
 
 parView : Int -> Parameter -> CispField.Model -> Element Msg
 parView voiceNumber p cispField =
-    let
-        str =
-            Parameter.toString p
-    in
     Element.map (CispFieldMsg voiceNumber p) (CispField.view cispField)
 
 

@@ -1,9 +1,8 @@
-module Cisp exposing (..)
+module Cisp exposing (CValue(..), CispProgram(..), CispWord(..), Depth(..), HighlightedChars(..), Sexpr(..), colorize, sexpr, toElem)
 
 import Element exposing (Element)
 import Element.Font
-import Html exposing (b)
-import Parser exposing ((|.), (|=), Parser, getChompedString)
+import Parser exposing ((|.), (|=), Parser)
 
 
 type Depth
@@ -31,26 +30,6 @@ type CValue
 type CispProgram
     = Invalid String
     | Valid String
-
-
-ofString : String -> CispProgram
-ofString s =
-    case Parser.run sexpr s of
-        Ok _ ->
-            Valid s
-
-        Err _ ->
-            Invalid s
-
-
-cispAsString : CispProgram -> String
-cispAsString cp =
-    case cp of
-        Invalid s ->
-            s
-
-        Valid s ->
-            s
 
 
 cispwords : List String
@@ -223,21 +202,6 @@ ofDepth (Depth c) =
             rgb 200 100 200
 
 
-leftColon : Element.Color -> HighlightedChars
-leftColon =
-    Colored '('
-
-
-rightColon : Element.Color -> HighlightedChars
-rightColon =
-    Colored ')'
-
-
-space : HighlightedChars
-space =
-    Uncolored ' '
-
-
 colorize : String -> List HighlightedChars
 colorize cispString =
     let
@@ -251,18 +215,6 @@ colorize cispString =
         Err _ ->
             cispString |> String.toList |> List.map (\c -> Uncolored c)
 
-mString : String -> Maybe String
-mString cispString =
-    let
-        result =
-            Parser.run sexpr cispString
-    in
-    case result of
-        Ok _ ->
-           Just cispString
-
-        Err _ ->
-            Nothing
 
 toElem : List (Element.Attribute msg) -> HighlightedChars -> Element msg
 toElem attrs c =

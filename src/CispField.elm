@@ -2,16 +2,10 @@ module CispField exposing
     ( Model
     , Msg(..)
     , OutMsg(..)
-    , addPlaceCursorEvent
-    , allowedSymbols
-    , arrayToString
-    , blur
-    , filter
+    , createKeyboardMsg
     , init
-    , insertAtList
     , update
     , view
-    , createKeyboardMsg
     )
 
 import Array exposing (Array)
@@ -23,8 +17,6 @@ import Element.Events
 import Element.Font
 import Element.Input
 import Keyboard exposing (Key(..), KeyChange(..))
-import Keyboard.Arrows as Arrows
-import Parameter exposing (Parameter(..))
 
 
 type alias Model =
@@ -34,22 +26,12 @@ type alias Model =
     }
 
 
-blur : Model -> Model
-blur model =
-    { model | pressedKeys = [] }
-
-
 init : String -> Model
 init initial =
     { pressedKeys = []
     , field = Array.fromList <| String.toList <| initial
     , cursorIndex = 0
     }
-
-
-arrayAsString : Array Char -> String
-arrayAsString arr =
-    arr |> Array.toList |> String.fromList
 
 
 allowedSymbols : Char -> Bool
@@ -155,9 +137,11 @@ type OutMsg
     = Highlight
     | EvalString String
 
-createKeyboardMsg : Keyboard.Msg -> Msg 
+
+createKeyboardMsg : Keyboard.Msg -> Msg
 createKeyboardMsg kbMsg =
-    KeyboardMsg kbMsg 
+    KeyboardMsg kbMsg
+
 
 update : Msg -> Model -> ( Model, Maybe OutMsg )
 update msg model =
@@ -210,10 +194,10 @@ update msg model =
                                 , cursorIndex = newModel.cursorIndex + 1
                             }
 
-                        ( False, Just (KeyUp other) ) ->
+                        ( False, Just (KeyUp _) ) ->
                             newModel
 
-                        ( False, Just (KeyDown kd) ) ->
+                        ( False, Just (KeyDown _) ) ->
                             newModel
 
                         ( False, Nothing ) ->
@@ -228,16 +212,6 @@ update msg model =
             ( model, Just (EvalString <| arrayToString model.field) )
 
 
-validProgram : Model -> Maybe String
-validProgram model =
-    model.field |> arrayToString |> Cisp.mString
-
-
-cursor : Element.Element msg
-cursor =
-    Element.el [ Element.Font.color (Element.rgb 1.0 0.0 0.0) ] (Element.text "|")
-
-
 arrayToString : Array Char -> String
 arrayToString arr =
     arr |> Array.toList |> String.fromList
@@ -250,11 +224,6 @@ addPlaceCursorEvent clickMsg arr =
             Element.el [ Element.Events.onClick (clickMsg idx) ] elm
     in
     List.indexedMap f arr
-
-
-insertAtList : Int -> Element msg -> List (Element msg) -> List (Element msg)
-insertAtList idx a lst =
-    lst |> Array.fromList |> Array.Extra.insertAt idx a |> Array.toList
 
 
 markCursor : Int -> Int -> Cisp.HighlightedChars -> Element msg

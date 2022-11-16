@@ -14,8 +14,7 @@
             "elm/parser": "1.1.0",
             "elm-community/array-extra": "2.6.0",
             "mdgriffith/elm-ui": "1.1.8",
-            "ohanhi/keyboard": "2.0.1",
-            "zwilias/elm-rosetree": "1.5.0"
+            "ohanhi/keyboard": "2.0.1"
         },
         "indirect": {
             "elm/time": "1.0.0",
