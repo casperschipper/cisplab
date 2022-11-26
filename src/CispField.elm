@@ -2,7 +2,7 @@ module CispField exposing
     ( Model
     , Msg(..)
     , OutMsg(..)
-    , createKeyboardMsg
+    , applyKeyboard
     , init
     , update
     , view
@@ -21,16 +21,14 @@ import Keyboard exposing (Key(..), KeyChange(..))
 
 
 type alias Model =
-    { pressedKeys : List Keyboard.Key
-    , field : Array Char
+    { field : Array Char
     , cursorIndex : Int
     }
 
 
 init : String -> Model
 init initial =
-    { pressedKeys = []
-    , field = Array.fromList <| String.toList <| initial
+    { field = Array.fromList <| String.toList <| initial
     , cursorIndex = 0
     }
 
@@ -129,8 +127,7 @@ addTrailingSpace array =
 
 
 type Msg
-    = KeyboardMsg Keyboard.Msg
-    | JumpToLocation Int
+    = JumpToLocation Int
     | Eval
 
 
@@ -139,73 +136,64 @@ type OutMsg
     | EvalString String
 
 
-createKeyboardMsg : Keyboard.Msg -> Msg
-createKeyboardMsg kbMsg =
-    KeyboardMsg kbMsg
+applyKeyboard : List Keyboard.Key -> Maybe Keyboard.KeyChange -> Model -> Model
+applyKeyboard pressedKeys keyChange model =
+    let
+        withTrail =
+            { model | field = addTrailingSpace model.field }
+
+        newModel =
+            handleArrows pressedKeys withTrail
+
+        controlPressed =
+            List.member Keyboard.Control pressedKeys
+    in
+    case ( controlPressed, keyChange ) of
+        ( True, Just (KeyUp (Character "e")) ) ->
+            gotoEndOfLine newModel
+
+        ( True, Just (KeyUp (Character "a")) ) ->
+            gotoStartOfLine newModel
+
+        ( True, Just (KeyUp (Character "d")) ) ->
+            deleteCurrentChar newModel
+
+        ( True, _ ) ->
+            newModel
+
+        ( False, Just (KeyDown Backspace) ) ->
+            deleteChar newModel
+
+        ( False, Just (KeyDown (Character any)) ) ->
+            case filter any of
+                Just c ->
+                    { newModel
+                        | field = insertAt newModel.cursorIndex c newModel.field
+                        , cursorIndex = newModel.cursorIndex + 1
+                    }
+
+                Nothing ->
+                    newModel
+
+        ( False, Just (KeyDown Keyboard.Spacebar) ) ->
+            { newModel
+                | field = insertAt newModel.cursorIndex ' ' newModel.field
+                , cursorIndex = newModel.cursorIndex + 1
+            }
+
+        ( False, Just (KeyUp _) ) ->
+            newModel
+
+        ( False, Just (KeyDown _) ) ->
+            newModel
+
+        ( False, Nothing ) ->
+            newModel
 
 
 update : Msg -> Model -> ( Model, Maybe OutMsg )
 update msg model =
     case msg of
-        KeyboardMsg keyMsg ->
-            let
-                withTrail =
-                    { model | field = addTrailingSpace model.field }
-
-                ( pressedKeys, keyChange ) =
-                    Keyboard.updateWithKeyChange Keyboard.anyKeyOriginal keyMsg model.pressedKeys
-
-                newModel =
-                    handleArrows pressedKeys { withTrail | pressedKeys = pressedKeys }
-
-                controlPressed =
-                    List.member Keyboard.Control pressedKeys
-
-                newModel2 =
-                    case ( controlPressed, keyChange ) of
-                        ( True, Just (KeyUp (Character "e")) ) ->
-                            gotoEndOfLine newModel
-
-                        ( True, Just (KeyUp (Character "a")) ) ->
-                            gotoStartOfLine newModel
-
-                        ( True, Just (KeyUp (Character "d")) ) ->
-                            deleteCurrentChar newModel
-
-                        ( True, _ ) ->
-                            newModel
-
-                        ( False, Just (KeyDown Backspace) ) ->
-                            deleteChar newModel
-
-                        ( False, Just (KeyDown (Character any)) ) ->
-                            case filter any of
-                                Just c ->
-                                    { newModel
-                                        | field = insertAt newModel.cursorIndex c newModel.field
-                                        , cursorIndex = newModel.cursorIndex + 1
-                                    }
-
-                                Nothing ->
-                                    newModel
-
-                        ( False, Just (KeyDown Keyboard.Spacebar) ) ->
-                            { newModel
-                                | field = insertAt newModel.cursorIndex ' ' newModel.field
-                                , cursorIndex = newModel.cursorIndex + 1
-                            }
-
-                        ( False, Just (KeyUp _) ) ->
-                            newModel
-
-                        ( False, Just (KeyDown _) ) ->
-                            newModel
-
-                        ( False, Nothing ) ->
-                            newModel
-            in
-            ( newModel2, Nothing )
-
         JumpToLocation location ->
             ( { model | cursorIndex = location }, Just Highlight )
 
@@ -262,7 +250,7 @@ view isActive model =
                 |> arrayToString
                 |> Cisp.colorize
                 -- should result in zip with placed highlight of current cursot
-                |> (markCursor isActive model.cursorIndex)
+                |> markCursor isActive model.cursorIndex
                 |> addPlaceCursorEvent (\idx -> JumpToLocation idx)
                 |> Element.wrappedRow [ Element.width <| Element.fillPortion 7, Element.Font.family [ Element.Font.monospace ] ]
     in

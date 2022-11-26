@@ -6,6 +6,8 @@ import Cisp exposing (..)
 import CispField
 import Element exposing (Element, column, fill, width)
 import Element.Background
+import Element.Input exposing (OptionState(..))
+import Element.Region exposing (..)
 import Html exposing (Html)
 import Json.Decode as JD
 import Json.Encode as JE
@@ -21,11 +23,83 @@ port receiveSocketMsg : (JD.Value -> msg) -> Sub msg
 port sendSocketCommand : JE.Value -> Cmd msg
 
 
-port blurs : (() -> msg) -> Sub msg
+port blurs : (Int -> msg) -> Sub msg
 
 
 type SelectedCisp
     = SelectedCisp Int Parameter
+
+
+nextParameter : Parameter -> Parameter
+nextParameter p =
+    case p of
+        Pitch ->
+            Velo
+
+        Velo ->
+            Duration
+
+        Duration ->
+            Channel
+
+        Channel ->
+            Pitch
+
+
+previousParameter : Parameter -> Parameter
+previousParameter p =
+    case p of
+        Pitch ->
+            Channel
+
+        Channel ->
+            Duration
+
+        Duration ->
+            Velo
+
+        Velo ->
+            Pitch
+
+
+nextVoice : Model -> SelectedCisp
+nextVoice model =
+    let
+        length =
+            Array.length model.cisps
+    in
+    case model.selected of
+        SelectedCisp idx par ->
+            if idx == (length - 1) then
+                SelectedCisp 0 par
+
+            else
+                SelectedCisp (idx + 1) par
+
+
+previousVoice : Model -> SelectedCisp
+previousVoice model =
+    let
+        length =
+            Array.length model.cisps
+    in
+    case model.selected of
+        SelectedCisp idx par ->
+            if idx == 0 then
+                SelectedCisp (length - 1) par
+
+            else
+                SelectedCisp (idx - 1) par
+
+
+selectedNextParameter : SelectedCisp -> SelectedCisp
+selectedNextParameter (SelectedCisp n p) =
+    SelectedCisp n (nextParameter p)
+
+
+selectedPreviousParameter : SelectedCisp -> SelectedCisp
+selectedPreviousParameter (SelectedCisp n p) =
+    SelectedCisp n (previousParameter p)
 
 
 isActive : Int -> Parameter -> SelectedCisp -> Bool
@@ -33,11 +107,18 @@ isActive voice par (SelectedCisp i p) =
     (voice == i) && (par == p)
 
 
+type alias KeyboardState =
+    { keys : List Keyboard.Key
+    , change : Maybe Keyboard.KeyChange
+    }
+
+
 type alias Model =
     { cisp : CispProgram
     , custom : String
     , cisps : Array OneVoice
     , selected : SelectedCisp
+    , keyboard : KeyboardState
     }
 
 
@@ -56,10 +137,11 @@ input =
 
 init : flags -> ( Model, Cmd Msg )
 init _ =
-    { cisp = Invalid ""
+    { cisp = Valid ""
     , custom = ""
-    , cisps = Array.fromList [ initVoice ]
+    , cisps = Array.fromList [ initVoice, initVoice ]
     , selected = SelectedCisp 0 Pitch
+    , keyboard = { keys = [], change = Nothing }
     }
         |> update (CispString input)
         |> Tuple.mapSecond
@@ -96,13 +178,15 @@ black =
 
 
 display : Model -> Html Msg
-display model  =
+display model =
     let
         cispsView =
             Element.column [ Element.width Element.fill ]
-                (model.cisps
-                    |> Array.indexedMap (\idx voice -> viewVoice idx voice model.selected)
-                    |> Array.toList
+                (Element.text "use shift and arrows to switch between voices"
+                    :: (model.cisps
+                            |> Array.indexedMap (\idx voice -> viewVoice idx voice model.selected)
+                            |> Array.toList
+                       )
                 )
     in
     Element.layout
@@ -111,6 +195,84 @@ display model  =
             [ cispsView
             ]
         )
+
+
+handleArrows : Maybe Keyboard.KeyChange -> Model -> Model
+handleArrows change model =
+    let
+        controlDown =
+            List.member Keyboard.Shift model.keyboard.keys
+    in
+    if controlDown then
+        case change of
+            Just (Keyboard.KeyDown Keyboard.ArrowDown) ->
+                { model
+                    | selected = nextVoice model
+                }
+
+            Just (Keyboard.KeyDown Keyboard.ArrowUp) ->
+                { model
+                    | selected = previousVoice model
+                }
+
+            _ ->
+                model
+
+    else
+        case change of
+            Just (Keyboard.KeyDown Keyboard.ArrowDown) ->
+                { model | selected = selectedNextParameter model.selected }
+
+            Just (Keyboard.KeyDown Keyboard.ArrowUp) ->
+                { model | selected = selectedPreviousParameter model.selected }
+
+            _ ->
+                model
+
+
+updateArrayAtIndex : Int -> (a -> a) -> Array a -> Result String (Array a)
+updateArrayAtIndex idx fupdate array =
+    case Array.get idx array of
+        Just val ->
+            Ok (Array.set idx (fupdate val) array)
+
+        Nothing ->
+            Err "This index does not exist"
+
+
+updateSelectedCisp : (CispField.Model -> CispField.Model) -> Model -> Model
+updateSelectedCisp updateFun model =
+    let
+        selectedCisp =
+            model.selected
+
+        updatePr : Parameter -> OneVoice -> OneVoice
+        updatePr para voice =
+            case para of
+                Pitch ->
+                    { voice | pitch = updateFun voice.pitch }
+
+                Velo ->
+                    { voice | velo = updateFun voice.velo }
+
+                Duration ->
+                    { voice | duration = updateFun voice.duration }
+
+                Channel ->
+                    { voice | channel = updateFun voice.channel }
+    in
+    case model.selected of
+        SelectedCisp idx par ->
+            case updateArrayAtIndex idx (updatePr par) model.cisps of
+                Ok newCisps ->
+                    { model | cisps = newCisps }
+
+                Err err ->
+                    let
+                        _ =
+                            Debug.log "udpateSelectedCisp" err
+                    in
+                    model
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -139,12 +301,16 @@ update msg model =
         KeyboardMsg kmsg ->
             -- map to current voice
             let
-                cispFieldMsg =
-                    case model.selected of
-                        SelectedCisp idx parameter ->
-                            CispFieldMsg idx parameter (CispField.createKeyboardMsg kmsg)
+                ( newKeys, change ) =
+                    Keyboard.updateWithKeyChange Keyboard.anyKeyOriginal kmsg model.keyboard.keys
+
+                newModel =
+                    { model | keyboard = { keys = newKeys, change = change } }
+
+                newModel2 =
+                    newModel |> handleArrows change
             in
-            update cispFieldMsg model
+            ( newModel2 |> updateSelectedCisp (CispField.applyKeyboard newKeys change), Cmd.none )
 
         CispFieldMsg idx parameter fieldMsg ->
             let
@@ -187,7 +353,7 @@ subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
         [ receiveSocketMsg <| WebSocket.receive ReceivedFrame
-        , blurs (\() -> Blur)
+        , blurs (\_ -> Blur)
         , Sub.map KeyboardMsg Keyboard.subscriptions
         ]
 
@@ -270,11 +436,21 @@ parView voiceNumber p selectedCisp cispField =
     Element.map (CispFieldMsg voiceNumber p) (CispField.view (isActive voiceNumber p selectedCisp) cispField)
 
 
+edges =
+    { top = 0, left = 0, right = 0, bottom = 0 }
+
+
 viewVoice : Int -> OneVoice -> SelectedCisp -> Element Msg
 viewVoice idx voice selectedCisp =
-    column [ width (Element.px 1024), Element.spacingXY 100 50 ]
-        [ parView idx Pitch selectedCisp voice.pitch
-        , parView idx Velo selectedCisp  voice.velo
+    column [ width (Element.px 1024), Element.spacingXY 40 20 ]
+        [ Element.el
+            [ Element.Region.heading 1
+            , Element.paddingEach { edges | top = 50 }
+            ]
+          <|
+            Element.text ("Voice: " ++ String.fromInt (idx + 1))
+        , parView idx Pitch selectedCisp voice.pitch
+        , parView idx Velo selectedCisp voice.velo
         , parView idx Duration selectedCisp voice.duration
         , parView idx Channel selectedCisp voice.channel
         ]
