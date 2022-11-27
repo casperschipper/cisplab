@@ -200,10 +200,10 @@ display model =
 handleArrows : Maybe Keyboard.KeyChange -> Model -> Model
 handleArrows change model =
     let
-        controlDown =
+        shiftDown =
             List.member Keyboard.Shift model.keyboard.keys
     in
-    if controlDown then
+    if shiftDown then
         case change of
             Just (Keyboard.KeyDown Keyboard.ArrowDown) ->
                 { model
@@ -243,9 +243,6 @@ updateArrayAtIndex idx fupdate array =
 updateSelectedCisp : (CispField.Model -> CispField.Model) -> Model -> Model
 updateSelectedCisp updateFun model =
     let
-        selectedCisp =
-            model.selected
-
         updatePr : Parameter -> OneVoice -> OneVoice
         updatePr para voice =
             case para of
