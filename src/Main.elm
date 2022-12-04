@@ -428,6 +428,42 @@ type alias OneVoice =
     }
 
 
+encodeVoice : OneVoice -> JE.Value
+encodeVoice voice =
+    JE.object
+        [ ( "pitch", CispField.encode voice.pitch )
+        , ( "velo", CispField.encode voice.velo )
+        , ( "channel", CispField.encode voice.channel )
+        , ( "duration", CispField.encode voice.duration )
+        ]
+
+
+decodeVoice : JD.Decoder OneVoice
+decodeVoice =
+    JD.map4 OneVoice
+        (JD.field "pitch" CispField.decoder)
+        (JD.field "velo" CispField.decoder)
+        (JD.field "channel" CispField.decoder)
+        (JD.field "duration" CispField.decoder)
+
+
+encode : Model -> JE.Value
+encode model =
+    JE.object
+        [ ( "cisps", JE.list encodeVoice (model.cisps |> Array.toList) )
+        ]
+
+
+decoder : JD.Decoder ( Model, Cmd Msg )
+decoder =
+    JD.field "cisps" (JD.list decodeVoice)
+        |> JD.map
+            (\voices ->
+                init ()
+                    |> (\( model, cmd ) -> ( { model | cisps = Array.fromList voices }, cmd ))
+            )
+
+
 initVoice : OneVoice
 initVoice =
     { pitch = CispField.init "(st 60)"

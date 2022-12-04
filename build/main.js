@@ -604,7 +604,7 @@ ${variant}`;
   var VERSION = "1.1.0";
   var TARGET_NAME = "My target name";
   var INITIAL_ELM_COMPILED_TIMESTAMP = Number(
-    "1670167531781"
+    "1670183329041"
   );
   var ORIGINAL_COMPILATION_MODE = "standard";
   var ORIGINAL_BROWSER_UI_POSITION = "BottomLeft";

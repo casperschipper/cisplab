@@ -6,6 +6,8 @@ module CispField exposing
     , init
     , update
     , view
+    , encode
+    , decoder
     )
 
 import Array exposing (Array)
@@ -18,6 +20,8 @@ import Element.Font
 import Element.Input
 import Html exposing (input)
 import Keyboard exposing (Key(..), KeyChange(..))
+import Json.Encode
+import Json.Decode
 
 
 type alias Model =
@@ -249,7 +253,16 @@ bypass shouldBypass f input =
     else
         input
 
+encode : Model -> Json.Encode.Value 
+encode model = 
+    Json.Encode.string (model.field |> arrayToString)
 
+decoder : Json.Decode.Decoder Model 
+decoder =
+    Json.Decode.string |> Json.Decode.map (\str ->
+        { field = str |> String.toList |> Array.fromList
+        , cursorIndex = 0 }
+    )
 view : Bool -> Model -> Element Msg
 view isActive model =
     let
