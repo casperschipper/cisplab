@@ -9,11 +9,13 @@ import Element.Background
 import Element.Input exposing (OptionState(..))
 import Element.Region exposing (..)
 import Html exposing (Html)
+import Html.Attributes exposing (style)
 import Json.Decode as JD
 import Json.Encode as JE
 import Keyboard
 import Parameter exposing (Parameter(..))
 import Parser
+import Process exposing (sleep)
 import WebSocket exposing (WebSocketCmd)
 
 
@@ -177,11 +179,22 @@ black =
     Element.rgb 1.0 1.0 1.0
 
 
+displaySelected : SelectedCisp -> Element Msg
+displaySelected (SelectedCisp n par) =
+    Element.row []
+        [ Element.text <| "Par is =" ++ Parameter.toString par
+        , Element.text <| "Index =" ++ String.fromInt n
+        ]
+
+
 display : Model -> Html Msg
 display model =
     let
         cispsView =
-            Element.column [ Element.width Element.fill ]
+            Element.column
+                [ Element.htmlAttribute (Html.Attributes.style "user-select" "none")
+                , Element.width Element.fill
+                ]
                 (Element.text "use shift and arrows to switch between voices"
                     :: (model.cisps
                             |> Array.indexedMap (\idx voice -> viewVoice idx voice model.selected)
@@ -192,13 +205,14 @@ display model =
     Element.layout
         [ Element.width Element.fill, Element.Background.color black ]
         (Element.column [ Element.centerX, Element.spacing 25 ]
-            [ cispsView
+            [ displaySelected model.selected
+            , cispsView
             ]
         )
 
 
-handleArrows : Maybe Keyboard.KeyChange -> Model -> Model
-handleArrows change model =
+handleUpDownArrows : Maybe Keyboard.KeyChange -> Model -> Model
+handleUpDownArrows change model =
     let
         shiftDown =
             List.member Keyboard.Shift model.keyboard.keys
@@ -305,7 +319,7 @@ update msg model =
                     { model | keyboard = { keys = newKeys, change = change } }
 
                 newModel2 =
-                    newModel |> handleArrows change
+                    newModel |> handleUpDownArrows change
             in
             ( newModel2 |> updateSelectedCisp (CispField.applyKeyboard newKeys change), Cmd.none )
 
@@ -349,9 +363,9 @@ handleAction action model =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ receiveSocketMsg <| WebSocket.receive ReceivedFrame
+        [ Sub.map KeyboardMsg Keyboard.subscriptions
+        , receiveSocketMsg <| WebSocket.receive ReceivedFrame
         , blurs (\_ -> Blur)
-        , Sub.map KeyboardMsg Keyboard.subscriptions
         ]
 
 

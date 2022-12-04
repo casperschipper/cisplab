@@ -21,8 +21,14 @@ type Sexpr
     | Space
 
 
+type alias CNumberVal =
+    { representation : String
+    , value : Float
+    }
+
+
 type CValue
-    = CNumber Float
+    = CNumber CNumberVal
     | CString String
     | CispWord String
 
@@ -57,12 +63,21 @@ type CispWord
 
 cispNumber : Parser CValue
 cispNumber =
+    Parser.succeed (\start number end source -> CNumber { representation = String.slice start end source, value = number })
+        |= Parser.getOffset
+        |= floaty
+        |= Parser.getOffset
+        |= Parser.getSource
+
+
+floaty : Parser Float
+floaty =
     Parser.number
-        { int = Just (\i -> i |> toFloat |> CNumber)
-        , hex = Nothing -- 0x001A is allowed
-        , octal = Nothing -- 0o0731 is not
-        , binary = Nothing -- 0b1101 is not
-        , float = Just CNumber
+        { int = Just toFloat
+        , hex = Nothing
+        , octal = Nothing
+        , binary = Nothing
+        , float = Just identity
         }
 
 
@@ -163,8 +178,8 @@ renderTree exp =
 cvalueToElement : CValue -> List HighlightedChars
 cvalueToElement cvalue =
     case cvalue of
-        CNumber flt ->
-            flt |> String.fromFloat |> String.toList |> List.map (\c -> Colored c (Element.rgb 0.0 0.4 0.0))
+        CNumber { representation } -> -- only display what user entered, we don't care if it valid or not.
+            representation |> String.toList |> List.map (\c -> Colored c (Element.rgb 0.0 0.4 0.0))
 
         CString str ->
             str |> String.toList |> List.map (\c -> Colored c (Element.rgb 0.4 0.4 0.0))

@@ -37,7 +37,7 @@ allowedSymbols : Char -> Bool
 allowedSymbols c =
     let
         allowed =
-            String.toList "()+-*/_ "
+            String.toList "()+-*/_. "
     in
     List.member c allowed
 
@@ -79,13 +79,21 @@ gotoStartOfLine model =
     }
 
 
-handleArrows : List Keyboard.Key -> Model -> Model
-handleArrows arrows model =
-    case arrows of
-        [ Keyboard.ArrowLeft ] ->
+handleArrows : Maybe Keyboard.KeyChange -> Model -> Model
+handleArrows marrow model =
+    case marrow of
+        Just (Keyboard.KeyDown Keyboard.ArrowLeft) ->
+            let
+                _ =
+                    Debug.log "arrow left" model.cursorIndex
+            in
             { model | cursorIndex = max (model.cursorIndex - 1) 0 }
 
-        [ Keyboard.ArrowRight ] ->
+        Just (Keyboard.KeyDown Keyboard.ArrowRight) ->
+            let
+                _ =
+                    Debug.log "arrow left" model.cursorIndex
+            in
             { model | cursorIndex = min (model.cursorIndex + 1) (Array.length model.field) }
 
         _ ->
@@ -143,7 +151,7 @@ applyKeyboard pressedKeys keyChange model =
             { model | field = addTrailingSpace model.field }
 
         newModel =
-            handleArrows pressedKeys withTrail
+            handleArrows keyChange withTrail
 
         controlPressed =
             List.member Keyboard.Control pressedKeys
