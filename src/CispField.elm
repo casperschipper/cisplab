@@ -22,6 +22,7 @@ import Html exposing (input)
 import Keyboard exposing (Key(..), KeyChange(..))
 import Json.Encode
 import Json.Decode
+import Style
 
 
 type alias Model =
@@ -277,7 +278,7 @@ view isActive model =
     in
     Element.row [ Element.width Element.fill ]
         [ field
-        , Element.Input.button [ Element.width <| Element.fillPortion 1 ]
+        , Style.styledButton
             { onPress = Just Eval
             , label = Element.text "eval"
             }

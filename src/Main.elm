@@ -6,6 +6,7 @@ import Cisp exposing (..)
 import CispField
 import Element exposing (Element, column, fill, width)
 import Element.Background
+import Style exposing (styledButton)
 import Element.Input exposing (OptionState(..))
 import Element.Region exposing (..)
 import Html exposing (Html)
@@ -121,6 +122,7 @@ type alias Model =
     , cisps : Array OneVoice
     , selected : SelectedCisp
     , keyboard : KeyboardState
+    , json : String
     }
 
 
@@ -130,6 +132,8 @@ type Msg
     | Blur
     | KeyboardMsg Keyboard.Msg
     | CispFieldMsg Int Parameter CispField.Msg
+    | ChangedJson String
+    | UpdateFromJson
 
 
 input : String
@@ -144,6 +148,7 @@ init _ =
     , cisps = Array.fromList [ initVoice, initVoice ]
     , selected = SelectedCisp 0 Pitch
     , keyboard = { keys = [], change = Nothing }
+    , json = ""
     }
         |> update (CispString input)
         |> Tuple.mapSecond
@@ -201,12 +206,30 @@ display model =
                             |> Array.toList
                        )
                 )
+
+        jsonInput =
+            Element.Input.text []
+                { onChange = ChangedJson
+                , text = model.json
+                , placeholder = Nothing
+                , label = Element.Input.labelAbove [] <| Element.text "json"
+                }
+
+        jsonButton =
+            styledButton
+                { onPress = Just UpdateFromJson
+                , label = Element.text "update from json"
+                }
     in
     Element.layout
         [ Element.width Element.fill, Element.Background.color black ]
         (Element.column [ Element.centerX, Element.spacing 25 ]
             [ displaySelected model.selected
             , cispsView
+
+            , Element.text <| JE.encode 4 (encode model)
+            , jsonButton
+            , jsonInput
             ]
         )
 
@@ -337,6 +360,21 @@ update msg model =
                     { model | cisps = Array.set idx newVoice model.cisps } |> handleAction maction
 
                 Nothing ->
+                    ( model, Cmd.none )
+
+        ChangedJson json ->
+            ( { model | json = json }, Cmd.none )
+
+        UpdateFromJson ->
+            case JD.decodeString decoder model.json of
+                Ok ( m, c ) ->
+                    ( m, c )
+
+                Err e ->
+                    let
+                        _ =
+                            Debug.log "json error" e
+                    in
                     ( model, Cmd.none )
 
 
@@ -501,3 +539,5 @@ viewVoice idx voice selectedCisp =
         , parView idx Duration selectedCisp voice.duration
         , parView idx Channel selectedCisp voice.channel
         ]
+
+
