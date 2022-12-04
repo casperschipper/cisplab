@@ -6,7 +6,6 @@ import Cisp exposing (..)
 import CispField
 import Element exposing (Element, column, fill, width)
 import Element.Background
-import Style exposing (styledButton)
 import Element.Input exposing (OptionState(..))
 import Element.Region exposing (..)
 import Html exposing (Html)
@@ -17,6 +16,7 @@ import Keyboard
 import Parameter exposing (Parameter(..))
 import Parser
 import Process exposing (sleep)
+import Style exposing (styledButton)
 import WebSocket exposing (WebSocketCmd)
 
 
@@ -27,6 +27,8 @@ port sendSocketCommand : JE.Value -> Cmd msg
 
 
 port blurs : (Int -> msg) -> Sub msg
+
+port copyToClipboard : String -> Cmd msg
 
 
 type SelectedCisp
@@ -226,8 +228,7 @@ display model =
         (Element.column [ Element.centerX, Element.spacing 25 ]
             [ displaySelected model.selected
             , cispsView
-
-            , Element.text <| JE.encode 4 (encode model)
+            , copyJsonButton
             , jsonButton
             , jsonInput
             ]
@@ -539,5 +540,3 @@ viewVoice idx voice selectedCisp =
         , parView idx Duration selectedCisp voice.duration
         , parView idx Channel selectedCisp voice.channel
         ]
-
-

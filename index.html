@@ -22,8 +22,16 @@
 
     window.onblur = function() { app.ports.blurs.send(42) }
 
+
+    // port to copy the whole state (as json):
+    app.ports.copyToClipboard.subscribe(copyToClipboard);
+    function copyToClipboard(json) {
+      navigator.clipboard.writeText(json);
+    };
+
     // Add this line!
     app.ports.sendSocketCommand.subscribe(sendSocketCommand);
+   
     var mySockets = {};
 
     window.addEventListener('keydown', function(e) {
