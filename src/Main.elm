@@ -136,6 +136,7 @@ type Msg
     | CispFieldMsg Int Parameter CispField.Msg
     | ChangedJson String
     | UpdateFromJson
+    | CopyToClip
 
 
 input : String
@@ -222,6 +223,11 @@ display model =
                 { onPress = Just UpdateFromJson
                 , label = Element.text "update from json"
                 }
+
+        copyJsonButton =
+             styledButton
+                { onPress = Just CopyToClip
+                , label = Element.text "copyJson" }
     in
     Element.layout
         [ Element.width Element.fill, Element.Background.color black ]
@@ -377,6 +383,10 @@ update msg model =
                             Debug.log "json error" e
                     in
                     ( model, Cmd.none )
+
+        CopyToClip ->
+            (model, copyToClipboard (JE.encode 0 (encode model)))
+        
 
 
 handleAction : Maybe Action -> Model -> ( Model, Cmd Msg )
