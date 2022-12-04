@@ -604,7 +604,11 @@ ${variant}`;
   var VERSION = "1.1.0";
   var TARGET_NAME = "My target name";
   var INITIAL_ELM_COMPILED_TIMESTAMP = Number(
+<<<<<<< HEAD
     "1670183590354"
+=======
+    "1670180653856"
+>>>>>>> d603c1e (continue)
   );
   var ORIGINAL_COMPILATION_MODE = "standard";
   var ORIGINAL_BROWSER_UI_POSITION = "BottomLeft";
@@ -17714,6 +17718,11 @@ var $mdgriffith$elm_ui$Element$Border$color = function (clr) {
 			'border-color',
 			clr));
 };
+var $mdgriffith$elm_ui$Element$rgb255 = F3(
+	function (red, green, blue) {
+		return A4($mdgriffith$elm_ui$Internal$Model$Rgba, red / 255, green / 255, blue / 255, 1);
+	});
+var $author$project$Style$gray = A3($mdgriffith$elm_ui$Element$rgb255, 241, 241, 241);
 var $mdgriffith$elm_ui$Internal$Model$PaddingStyle = F5(
 	function (a, b, c, d, e) {
 		return {$: 'PaddingStyle', a: a, b: b, c: c, d: d, e: e};
@@ -17753,6 +17762,7 @@ var $mdgriffith$elm_ui$Element$Border$width = function (v) {
 var $author$project$Style$styledButton = $mdgriffith$elm_ui$Element$Input$button(
 	_List_fromArray(
 		[
+			$mdgriffith$elm_ui$Element$Background$color($author$project$Style$gray),
 			$mdgriffith$elm_ui$Element$padding(10),
 			$mdgriffith$elm_ui$Element$Border$width(1),
 			$mdgriffith$elm_ui$Element$Border$solid,
@@ -18812,10 +18822,6 @@ var $author$project$Cisp$cvalueToElement = function (cvalue) {
 	}
 };
 var $elm$core$Basics$modBy = _Basics_modBy;
-var $mdgriffith$elm_ui$Element$rgb255 = F3(
-	function (red, green, blue) {
-		return A4($mdgriffith$elm_ui$Internal$Model$Rgba, red / 255, green / 255, blue / 255, 1);
-	});
 var $author$project$Cisp$ofDepth = function (_v0) {
 	var c = _v0.a;
 	var rgb = $mdgriffith$elm_ui$Element$rgb255;
@@ -19161,6 +19167,8 @@ var $author$project$CispField$view = F2(
 			$mdgriffith$elm_ui$Element$row,
 			_List_fromArray(
 				[
+					$mdgriffith$elm_ui$Element$Background$color(
+					A3($mdgriffith$elm_ui$Element$rgb, 0.97, 0.97, 0.9)),
 					$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill)
 				]),
 			_List_fromArray(

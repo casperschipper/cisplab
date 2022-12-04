@@ -3,11 +3,11 @@ module CispField exposing
     , Msg(..)
     , OutMsg(..)
     , applyKeyboard
+    , decoder
+    , encode
     , init
     , update
     , view
-    , encode
-    , decoder
     )
 
 import Array exposing (Array)
@@ -17,11 +17,10 @@ import Element exposing (Element, rgb)
 import Element.Background
 import Element.Events
 import Element.Font
-import Element.Input
 import Html exposing (input)
-import Keyboard exposing (Key(..), KeyChange(..))
-import Json.Encode
 import Json.Decode
+import Json.Encode
+import Keyboard exposing (Key(..), KeyChange(..))
 import Style
 
 
@@ -231,7 +230,7 @@ addPlaceCursorEvent clickMsg arr =
 markCursorAt : Int -> Int -> Cisp.HighlightedChars -> Element msg
 markCursorAt idx n char =
     if n == idx then
-        Cisp.toElem [ Element.Background.color (rgb 0.3 0.3 0.3) ] char
+        Cisp.toElem [ Element.Background.color (Element.rgb 0.3 0.3 0.3) ] char
 
     else
         Cisp.toElem [] char
@@ -254,16 +253,23 @@ bypass shouldBypass f input =
     else
         input
 
-encode : Model -> Json.Encode.Value 
-encode model = 
+
+encode : Model -> Json.Encode.Value
+encode model =
     Json.Encode.string (model.field |> arrayToString)
 
-decoder : Json.Decode.Decoder Model 
+
+decoder : Json.Decode.Decoder Model
 decoder =
-    Json.Decode.string |> Json.Decode.map (\str ->
-        { field = str |> String.toList |> Array.fromList
-        , cursorIndex = 0 }
-    )
+    Json.Decode.string
+        |> Json.Decode.map
+            (\str ->
+                { field = str |> String.toList |> Array.fromList
+                , cursorIndex = 0
+                }
+            )
+
+
 view : Bool -> Model -> Element Msg
 view isActive model =
     let
@@ -276,7 +282,7 @@ view isActive model =
                 |> addPlaceCursorEvent (\idx -> JumpToLocation idx)
                 |> Element.wrappedRow [ Element.width <| Element.fillPortion 7, Element.Font.family [ Element.Font.monospace ] ]
     in
-    Element.row [ Element.width Element.fill ]
+    Element.row [ Element.Background.color (Element.rgb 0.97 0.97 0.9), Element.width Element.fill ]
         [ field
         , Style.styledButton
             { onPress = Just Eval
