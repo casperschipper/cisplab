@@ -13,11 +13,10 @@ module CispField exposing
 import Array exposing (Array)
 import Array.Extra exposing (insertAt)
 import Cisp
-import Element exposing (Element, rgb)
+import Element exposing (Element)
 import Element.Background
 import Element.Events
 import Element.Font
-import Html exposing (input)
 import Json.Decode
 import Json.Encode
 import Keyboard exposing (Key(..), KeyChange(..))
@@ -83,22 +82,24 @@ gotoStartOfLine model =
     }
 
 
+moveLeft : Model -> Model
+moveLeft model =
+    { model | cursorIndex = max (model.cursorIndex - 1) 0 }
+
+
+moveRight : Model -> Model
+moveRight model =
+    { model | cursorIndex = min (model.cursorIndex + 1) (Array.length model.field) }
+
+
 handleArrows : Maybe Keyboard.KeyChange -> Model -> Model
 handleArrows marrow model =
     case marrow of
         Just (Keyboard.KeyDown Keyboard.ArrowLeft) ->
-            let
-                _ =
-                    Debug.log "arrow left" model.cursorIndex
-            in
-            { model | cursorIndex = max (model.cursorIndex - 1) 0 }
+            moveLeft model
 
         Just (Keyboard.KeyDown Keyboard.ArrowRight) ->
-            let
-                _ =
-                    Debug.log "arrow left" model.cursorIndex
-            in
-            { model | cursorIndex = min (model.cursorIndex + 1) (Array.length model.field) }
+            moveRight model
 
         _ ->
             model
@@ -148,6 +149,112 @@ type OutMsg
     | EvalString String
 
 
+type CharState
+    = Start
+    | InWord
+    | Done
+    | InvalidPosition
+
+
+currentChar : Model -> Maybe Char
+currentChar model =
+    Array.get model.cursorIndex model.field
+
+
+isSpace : Char -> Bool
+isSpace c =
+    c == ' ' || c == '\t' || c == '\n'
+
+
+gotoPreviousWord : Model -> Model
+gotoPreviousWord model =
+    let
+        helper state mdl =
+            case model.cursorIndex of
+                0 ->
+                    model
+
+                other ->
+                    if model.cursorIndex == Array.length model.field - 1 then
+                        model
+
+                    else
+                        case state of
+                            Done ->
+                                mdl
+
+                            Start ->
+                                case mdl |> moveLeft |> currentChar of
+                                    Just c ->
+                                        if isSpace c then
+                                            mdl |> helper Start
+
+                                        else
+                                            mdl |> helper InWord
+
+                                    Nothing ->
+                                        helper InvalidPosition mdl
+
+                            InWord ->
+                                case mdl |> moveLeft |> currentChar of
+                                    Just c ->
+                                        if isSpace c then
+                                            mdl |> helper Done
+
+                                        else
+                                            mdl |> helper InWord
+
+                                    Nothing ->
+                                        helper InvalidPosition mdl
+
+                            InvalidPosition ->
+                                { mdl | cursorIndex = 0 }
+    in
+    helper Start model
+
+
+gotoNextWord : Model -> Model
+gotoNextWord model =
+    let
+        helper state mdl =
+            if model.cursorIndex == Array.length model.field - 1 then
+                model
+
+            else
+                case state of
+                    Done ->
+                        mdl
+
+                    Start ->
+                        case mdl |> moveRight |> currentChar of
+                            Just c ->
+                                if isSpace c then
+                                    mdl |> helper Start
+
+                                else
+                                    mdl |> helper InWord
+
+                            Nothing ->
+                                helper InvalidPosition mdl
+
+                    InWord ->
+                        case mdl |> moveRight |> currentChar of
+                            Just c ->
+                                if isSpace c then
+                                    mdl |> helper Done
+
+                                else
+                                    mdl |> helper InWord
+
+                            Nothing ->
+                                helper InvalidPosition mdl
+
+                    InvalidPosition ->
+                        { mdl | cursorIndex = Array.length model.field - 1 }
+    in
+    helper Start model
+
+
 applyKeyboard : List Keyboard.Key -> Maybe Keyboard.KeyChange -> Model -> Model
 applyKeyboard pressedKeys keyChange model =
     let
@@ -159,24 +266,33 @@ applyKeyboard pressedKeys keyChange model =
 
         controlPressed =
             List.member Keyboard.Control pressedKeys
+
+        altPressed =
+            List.member Keyboard.Alt pressedKeys
     in
-    case ( controlPressed, keyChange ) of
-        ( True, Just (KeyUp (Character "e")) ) ->
+    case ( altPressed, controlPressed, keyChange ) of
+        ( True, _, Just (KeyUp Keyboard.ArrowRight) ) ->
+            gotoPreviousWord newModel
+
+        ( True, _, Just (KeyUp Keyboard.ArrowLeft) ) ->
+            gotoNextWord newModel
+
+        ( _, True, Just (KeyUp (Character "e")) ) ->
             gotoEndOfLine newModel
 
-        ( True, Just (KeyUp (Character "a")) ) ->
+        ( _, True, Just (KeyUp (Character "a")) ) ->
             gotoStartOfLine newModel
 
-        ( True, Just (KeyUp (Character "d")) ) ->
+        ( _, True, Just (KeyUp (Character "d")) ) ->
             deleteCurrentChar newModel
 
-        ( True, _ ) ->
+        ( _, True, _ ) ->
             newModel
 
-        ( False, Just (KeyDown Backspace) ) ->
+        ( _, False, Just (KeyDown Backspace) ) ->
             deleteChar newModel
 
-        ( False, Just (KeyDown (Character any)) ) ->
+        ( _, False, Just (KeyDown (Character any)) ) ->
             case filter any of
                 Just c ->
                     { newModel
@@ -187,19 +303,19 @@ applyKeyboard pressedKeys keyChange model =
                 Nothing ->
                     newModel
 
-        ( False, Just (KeyDown Keyboard.Spacebar) ) ->
+        ( _, False, Just (KeyDown Keyboard.Spacebar) ) ->
             { newModel
                 | field = insertAt newModel.cursorIndex ' ' newModel.field
                 , cursorIndex = newModel.cursorIndex + 1
             }
 
-        ( False, Just (KeyUp _) ) ->
+        ( _, False, Just (KeyUp _) ) ->
             newModel
 
-        ( False, Just (KeyDown _) ) ->
+        ( _, False, Just (KeyDown _) ) ->
             newModel
 
-        ( False, Nothing ) ->
+        ( _, False, Nothing ) ->
             newModel
 
 
@@ -243,15 +359,6 @@ markCursor active n array =
 
     else
         List.map (\char -> Cisp.toElem [] char) array
-
-
-bypass : Bool -> (a -> a) -> a -> a
-bypass shouldBypass f input =
-    if shouldBypass then
-        f input
-
-    else
-        input
 
 
 encode : Model -> Json.Encode.Value

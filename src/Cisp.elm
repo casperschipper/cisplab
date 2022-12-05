@@ -1,4 +1,4 @@
-module Cisp exposing (CValue(..), CispProgram(..), CispWord(..), Depth(..), HighlightedChars(..), Sexpr(..), colorize, sexpr, toElem)
+module Cisp exposing (CNumberVal, CValue(..), CispProgram(..), Depth(..), HighlightedChars(..), Sexpr(..), colorize, sexpr, toElem)
 
 import Element exposing (Element)
 import Element.Font
@@ -9,6 +9,7 @@ type Depth
     = Depth Int
 
 
+increase : Depth -> Depth
 increase (Depth d) =
     Depth (d + 1)
 
@@ -55,10 +56,6 @@ cispwords =
     , "~"
     , "t"
     ]
-
-
-type CispWord
-    = Seq
 
 
 cispNumber : Parser CValue
@@ -178,7 +175,8 @@ renderTree exp =
 cvalueToElement : CValue -> List HighlightedChars
 cvalueToElement cvalue =
     case cvalue of
-        CNumber { representation } -> -- only display what user entered, we don't care if it valid or not.
+        CNumber { representation } ->
+            -- only display what user entered, we don't care if it valid or not.
             representation |> String.toList |> List.map (\c -> Colored c (Element.rgb 0.0 0.4 0.0))
 
         CString str ->

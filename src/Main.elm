@@ -1,21 +1,19 @@
-port module Main exposing (Action(..), Model, Msg(..), OneVoice, SelectedCisp(..), main)
+port module Main exposing (Action(..), KeyboardState, Model, Msg(..), OneVoice, SelectedCisp(..), main)
 
 import Array exposing (Array)
 import Browser exposing (Document)
-import Cisp exposing (..)
+import Cisp exposing (CispProgram(..), sexpr)
 import CispField
 import Element exposing (Element, column, fill, width)
 import Element.Background
-import Element.Input exposing (OptionState(..))
-import Element.Region exposing (..)
+import Element.Input
+import Element.Region
 import Html exposing (Html)
-import Html.Attributes exposing (style)
+import Html.Attributes
 import Json.Decode as JD
 import Json.Encode as JE
 import Keyboard
 import Parameter exposing (Parameter(..))
-import Parser
-import Process exposing (sleep)
 import Style exposing (styledButton)
 import WebSocket exposing (WebSocketCmd)
 
@@ -27,6 +25,7 @@ port sendSocketCommand : JE.Value -> Cmd msg
 
 
 port blurs : (Int -> msg) -> Sub msg
+
 
 port copyToClipboard : String -> Cmd msg
 
@@ -69,12 +68,12 @@ previousParameter p =
 
 nextVoice : Model -> SelectedCisp
 nextVoice model =
-    let
-        length =
-            Array.length model.cisps
-    in
     case model.selected of
         SelectedCisp idx par ->
+            let
+                length =
+                    Array.length model.cisps
+            in
             if idx == (length - 1) then
                 SelectedCisp 0 par
 
@@ -84,13 +83,13 @@ nextVoice model =
 
 previousVoice : Model -> SelectedCisp
 previousVoice model =
-    let
-        length =
-            Array.length model.cisps
-    in
     case model.selected of
         SelectedCisp idx par ->
             if idx == 0 then
+                let
+                    length =
+                        Array.length model.cisps
+                in
                 SelectedCisp (length - 1) par
 
             else
@@ -119,8 +118,7 @@ type alias KeyboardState =
 
 
 type alias Model =
-    { cisp : CispProgram
-    , custom : String
+    { custom : String
     , cisps : Array OneVoice
     , selected : SelectedCisp
     , keyboard : KeyboardState
@@ -129,8 +127,7 @@ type alias Model =
 
 
 type Msg
-    = CispString String
-    | ReceivedFrame (Result JD.Error WebSocket.WebSocketMsg)
+    = ReceivedFrame (Result JD.Error WebSocket.WebSocketMsg)
     | Blur
     | KeyboardMsg Keyboard.Msg
     | CispFieldMsg Int Parameter CispField.Msg
@@ -139,30 +136,21 @@ type Msg
     | CopyToClip
 
 
-input : String
-input =
-    "(seq 1 (seq 4 5) 3)"
-
-
 init : flags -> ( Model, Cmd Msg )
 init _ =
-    { cisp = Valid ""
-    , custom = ""
-    , cisps = Array.fromList [ initVoice, initVoice ]
-    , selected = SelectedCisp 0 Pitch
-    , keyboard = { keys = [], change = Nothing }
-    , json = ""
-    }
-        |> update (CispString input)
-        |> Tuple.mapSecond
-            (\_ ->
-                WebSocket.Connect
-                    { name = "cisp"
-                    , address = "ws://127.0.0.1:3000"
-                    , protocol = "json"
-                    }
-                    |> wssend
-            )
+    ( { custom = ""
+      , cisps = Array.fromList [ initVoice, initVoice ]
+      , selected = SelectedCisp 0 Pitch
+      , keyboard = { keys = [], change = Nothing }
+      , json = ""
+      }
+    , WebSocket.Connect
+        { name = "cisp"
+        , address = "ws://127.0.0.1:3000"
+        , protocol = "json"
+        }
+        |> wssend
+    )
 
 
 main : Platform.Program () Model Msg
@@ -225,18 +213,21 @@ display model =
                 }
 
         copyJsonButton =
-             styledButton
+            styledButton
                 { onPress = Just CopyToClip
-                , label = Element.text "copyJson" }
+                , label = Element.text "copyJson"
+                }
     in
     Element.layout
-        [ Element.width Element.fill, Element.Background.color black ]
+        [ Element.width Element.fill, Element.Background.color black, Element.padding 100 ]
         (Element.column [ Element.centerX, Element.spacing 25 ]
             [ displaySelected model.selected
             , cispsView
             , copyJsonButton
-            , jsonButton
-            , jsonInput
+            , Element.row [ width Element.fill, Element.spacing 25 ]
+                [ Element.el [ width fill, Element.centerY ] jsonInput
+                , Element.el [ Element.alignBottom ] jsonButton
+                ]
             ]
         )
 
@@ -308,29 +299,13 @@ updateSelectedCisp updateFun model =
                 Ok newCisps ->
                     { model | cisps = newCisps }
 
-                Err err ->
-                    let
-                        _ =
-                            Debug.log "udpateSelectedCisp" err
-                    in
+                Err _ ->
                     model
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        CispString str ->
-            let
-                result =
-                    Parser.run sexpr str
-            in
-            case result of
-                Ok _ ->
-                    ( { model | cisp = Valid str }, Cmd.none )
-
-                Err _ ->
-                    ( { model | cisp = Invalid str }, Cmd.none )
-
         ReceivedFrame _ ->
             ( model, Cmd.none )
 
@@ -377,16 +352,11 @@ update msg model =
                 Ok ( m, c ) ->
                     ( m, c )
 
-                Err e ->
-                    let
-                        _ =
-                            Debug.log "json error" e
-                    in
+                Err _ ->
                     ( model, Cmd.none )
 
         CopyToClip ->
-            (model, copyToClipboard (JE.encode 0 (encode model)))
-        
+            ( model, copyToClipboard (JE.encode 0 (encode model)) )
 
 
 handleAction : Maybe Action -> Model -> ( Model, Cmd Msg )
@@ -397,9 +367,11 @@ handleAction action model =
 
         Just (Update idx par str) ->
             let
+                idxstr : String
                 idxstr =
                     String.fromInt idx
 
+                address : String
                 address =
                     String.join "/" [ idxstr, Parameter.toString par ]
             in
@@ -532,6 +504,7 @@ parView voiceNumber p selectedCisp cispField =
     Element.map (CispFieldMsg voiceNumber p) (CispField.view (isActive voiceNumber p selectedCisp) cispField)
 
 
+edges : { top : Int, left : Int, right : Int, bottom : Int }
 edges =
     { top = 0, left = 0, right = 0, bottom = 0 }
 
