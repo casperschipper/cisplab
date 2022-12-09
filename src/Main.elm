@@ -4,6 +4,7 @@ import Array exposing (Array)
 import Browser exposing (Document)
 import Cisp exposing (CispProgram(..), sexpr)
 import CispField
+import Dict exposing (remove)
 import Element exposing (Element, column, fill, width)
 import Element.Background
 import Element.Input
@@ -134,6 +135,8 @@ type Msg
     | ChangedJson String
     | UpdateFromJson
     | CopyToClip
+    | AddVoice
+    | RemoveVoice
 
 
 init : flags -> ( Model, Cmd Msg )
@@ -186,6 +189,12 @@ displaySelected (SelectedCisp n par) =
 display : Model -> Html Msg
 display model =
     let
+        addVoiceButton =
+            styledButton { onPress = Just AddVoice, label = Element.text "+ add voice" }
+
+        removeVoiceButton =
+            styledButton { onPress = Just RemoveVoice, label = Element.text "- remove voice" }
+
         cispsView =
             Element.column
                 [ Element.htmlAttribute (Html.Attributes.style "user-select" "none")
@@ -223,6 +232,7 @@ display model =
         (Element.column [ Element.centerX, Element.spacing 25 ]
             [ displaySelected model.selected
             , cispsView
+            , Element.row [ Element.spacing 5 ] [ addVoiceButton, removeVoiceButton ]
             , copyJsonButton
             , Element.row [ width Element.fill, Element.spacing 25 ]
                 [ Element.el [ width fill, Element.centerY ] jsonInput
@@ -357,6 +367,29 @@ update msg model =
 
         CopyToClip ->
             ( model, copyToClipboard (JE.encode 0 (encode model)) )
+
+        AddVoice ->
+            ( { model
+                | cisps = Array.push initVoice model.cisps
+              }
+            , Cmd.none
+            )
+
+        RemoveVoice ->
+            let
+                l =
+                    Array.length model.cisps
+            in
+            case l of
+                0 ->
+                    ( model, Cmd.none )
+
+                nonZero ->
+                    ( { model
+                        | cisps = Array.slice 0 (nonZero - 1) model.cisps
+                      }
+                    , Cmd.none
+                    )
 
 
 handleAction : Maybe Action -> Model -> ( Model, Cmd Msg )
