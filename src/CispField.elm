@@ -166,6 +166,11 @@ isSpace c =
     c == ' ' || c == '\t' || c == '\n'
 
 
+deleteTail : Model -> Model
+deleteTail model =
+    { model | field = Array.slice 0 model.cursorIndex model.field }
+
+
 gotoPreviousWord : Model -> Model
 gotoPreviousWord model =
     let
@@ -285,6 +290,9 @@ applyKeyboard pressedKeys keyChange model =
 
         ( _, True, Just (KeyUp (Character "d")) ) ->
             deleteCurrentChar newModel
+
+        ( _, True, Just (KeyUp (Character "k")) ) ->
+            deleteTail newModel
 
         ( _, True, _ ) ->
             newModel

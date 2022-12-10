@@ -87,13 +87,21 @@ parseString str =
         CString str
 
 
+isAlphaOrSymbol c =
+    let
+        legal =
+            "+-/*~"
+    in
+    Char.isAlpha c || List.member c (String.toList legal)
+
+
 value : Parser CValue
 value =
     Parser.oneOf
         [ cispNumber
         , Parser.succeed ()
-            |. Parser.chompIf Char.isAlpha
-            |. Parser.chompWhile Char.isAlpha
+            |. Parser.chompIf isAlphaOrSymbol
+            |. Parser.chompWhile isAlphaOrSymbol
             -- ChompWhile is dangerous!!!
             |> Parser.getChompedString
             |> Parser.map parseString
